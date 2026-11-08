@@ -453,8 +453,80 @@ export default function Expenses() {
               }
             />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+            <>
+              {/* Mobile Cards View (md:hidden) */}
+              <div className="md:hidden divide-y divide-[var(--color-border)]">
+                {filteredExpenses.map((exp) => (
+                  <div key={`m-exp-${exp.id}`} className="p-3.5 space-y-2 bg-[var(--color-bg-primary)]">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="text-base font-bold text-red-500 font-mono-num block">
+                          {formatCurrency(exp.amount)}
+                        </span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-[var(--color-bg-tertiary)] text-[var(--color-text-primary)] border border-[var(--color-border)]">
+                            {exp.category}
+                          </span>
+                          <span
+                            className={cn(
+                              'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold',
+                              exp.spentFor === 'Girlfriend' && 'bg-pink-500/10 text-pink-500 border border-pink-500/20',
+                              exp.spentFor === 'Me' && 'bg-blue-500/10 text-blue-500 border border-blue-500/20',
+                              exp.spentFor === 'Family' && 'bg-amber-500/10 text-amber-500 border border-amber-500/20',
+                              exp.spentFor !== 'Girlfriend' &&
+                                exp.spentFor !== 'Me' &&
+                                exp.spentFor !== 'Family' &&
+                                'bg-slate-500/10 text-slate-400'
+                            )}
+                          >
+                            {exp.spentFor === 'Girlfriend' && <Heart className="w-3 h-3" />}
+                            {exp.spentFor}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="!p-1.5 text-[var(--color-text-tertiary)]"
+                          onClick={() => setEditingExpense(exp)}
+                          title="Edit"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="!p-1.5 text-red-500"
+                          onClick={() => setDeleteExpenseItem(exp)}
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs text-[var(--color-text-tertiary)] pt-1">
+                      <span className="inline-flex items-center gap-1 font-mono-num">
+                        <Calendar className="w-3 h-3" />
+                        {formatDate(exp.date)}
+                      </span>
+                      <span>{getBankName(exp.bankAccountId)}</span>
+                    </div>
+
+                    {exp.description && (
+                      <p className="text-xs text-[var(--color-text-secondary)] italic">
+                        {exp.description}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-[var(--color-border)] bg-[var(--color-bg-tertiary)]/80 text-[11px] font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
                     <th className="py-3 px-4">Date</th>
@@ -533,7 +605,8 @@ export default function Expenses() {
                 </tbody>
               </table>
             </div>
-          )}
+          </>
+        )}
         </Card>
       )}
 

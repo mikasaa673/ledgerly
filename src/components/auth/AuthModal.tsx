@@ -29,6 +29,7 @@ import {
   ShieldCheck,
   Smartphone,
   Laptop,
+  User,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -40,6 +41,7 @@ interface AuthModalProps {
 export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const {
     user,
+    userName,
     loading,
     isConfigured,
     signIn,
@@ -54,6 +56,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   } = useAuth();
 
   const [mode, setMode] = useState<'signin' | 'signup' | 'forgot' | 'config'>('signin');
+  const [fullName, setFullName] = useState(userName || '');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -104,6 +107,11 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           setErrorMsg(res.error || 'Failed to sign in');
         }
       } else if (mode === 'signup') {
+        if (!fullName.trim()) {
+          setErrorMsg('Please enter your name');
+          setIsSubmitting(false);
+          return;
+        }
         if (password.length < 6) {
           setErrorMsg('Password must be at least 6 characters');
           setIsSubmitting(false);
@@ -114,7 +122,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           setIsSubmitting(false);
           return;
         }
-        const res = await signUp(email, password);
+        const res = await signUp(email, password, fullName.trim());
         if (res.success) {
           setSuccessMsg(res.message || 'Account created successfully!');
           if (res.message?.includes('check your email')) {
@@ -213,7 +221,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                   Signed in as
                 </span>
                 <span className="text-sm font-semibold text-zinc-950 dark:text-zinc-50 truncate block mt-0.5">
-                  {user.email}
+                  {userName ? `${userName} (${user.email})` : user.email}
                 </span>
                 <div className="flex items-center gap-1.5 mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
                   <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
@@ -420,6 +428,25 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                   STANDARD LOGIN / REGISTER FORM
                   ============================================================ */
               <form onSubmit={handleSubmit} className="space-y-3">
+                {mode === 'signup' && (
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                      Your Name
+                    </label>
+                    <div className="relative">
+                      <User className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        required
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        placeholder="e.g. Karthikeya"
+                        className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
                     Email Address

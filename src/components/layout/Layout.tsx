@@ -29,8 +29,6 @@ import { saveAs } from 'file-saver';
 import { format } from 'date-fns';
 
 const pageTitles: Record<string, { title: string; subtitle: string }> = {
-  '/': { title: 'Hi karthikeya welcome', subtitle: '' },
-  '/business-lending': { title: 'Hi karthikeya welcome', subtitle: '' },
   '/dashboard': { title: 'Dashboard', subtitle: '' },
   '/ledger': { title: 'Master Ledger & Audit Log', subtitle: '' },
   '/personal-lending': { title: 'Personal', subtitle: '' },
@@ -53,10 +51,19 @@ export default function Layout() {
     theme,
     toggleTheme,
   } = useApp();
-  const { user } = useAuth();
+  const { user, userName } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const location = useLocation();
-  const pageInfo = pageTitles[location.pathname] || { title: 'Ledgerly', subtitle: 'Financial Management' };
+
+  const welcomeGreeting = userName
+    ? `Hi ${userName}, welcome`
+    : user
+    ? `Hi ${user.email?.split('@')[0] || 'there'}, welcome`
+    : 'Welcome to Ledgerly';
+
+  const pageInfo = (location.pathname === '/' || location.pathname === '/business-lending')
+    ? { title: welcomeGreeting, subtitle: '' }
+    : pageTitles[location.pathname] || { title: 'Ledgerly', subtitle: 'Financial Management' };
 
   const totalBankBalance = bankAccounts.reduce((sum, a) => sum + (a.currentBalance || 0), 0);
 

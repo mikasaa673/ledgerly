@@ -51,8 +51,18 @@ import { loadDemoData, removeDemoData, hasDemoData } from '../utils/demoData';
 
 export default function SettingsPage() {
   const { settings, updateSettings, theme, toggleTheme, refreshBankAccounts, setShowResetConfirm } = useApp();
-  const { user, isConfigured, lastSyncedAt } = useAuth();
+  const { user, userName, updateUserName, isConfigured, lastSyncedAt } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [profileName, setProfileName] = useState(userName || '');
+
+  useEffect(() => {
+    setProfileName(userName || '');
+  }, [userName]);
+
+  const handleSaveProfileName = async () => {
+    await updateUserName(profileName);
+    showFeedback('Your name updated successfully!');
+  };
 
   // Local lists for edits
   const [expenseCats, setExpenseCats] = useState<string[]>([]);
@@ -391,6 +401,28 @@ export default function SettingsPage() {
         </h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+          {/* Your Name / Display Greeting */}
+          <div className="p-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-tertiary)]/40 space-y-2 sm:col-span-2">
+            <div>
+              <p className="font-semibold text-[var(--color-text-primary)]">Your Name (Display Greeting)</p>
+              <p className="text-[10px] text-[var(--color-text-tertiary)] mt-0.5">
+                Sets the top greeting banner (e.g. "Hi {profileName || '...'}, welcome").
+              </p>
+            </div>
+            <div className="flex gap-2 max-w-md">
+              <input
+                type="text"
+                value={profileName}
+                onChange={(e) => setProfileName(e.target.value)}
+                placeholder="e.g. Karthikeya"
+                className="flex-1 px-3 py-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-input)] text-[var(--color-text-primary)] text-xs focus:outline-none focus:ring-1 focus:ring-blue-600"
+              />
+              <Button size="sm" variant="primary" onClick={handleSaveProfileName}>
+                Save Name
+              </Button>
+            </div>
+          </div>
+
           {/* Theme Toggle */}
           <div className="p-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-tertiary)]/40 flex items-center justify-between">
             <div>

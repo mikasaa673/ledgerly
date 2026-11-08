@@ -336,8 +336,74 @@ export default function IncomePage() {
               }
             />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+            <>
+              {/* Mobile Cards View (md:hidden) */}
+              <div className="md:hidden divide-y divide-[var(--color-border)]">
+                {incomes.map((inc) => {
+                  const isAuto = !!inc.relatedTransactionId;
+                  return (
+                    <div key={`m-inc-${inc.id}`} className="p-3.5 space-y-2 bg-[var(--color-bg-primary)]">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <span className="text-base font-bold text-emerald-500 font-mono-num block">
+                            +{formatCurrency(inc.amount)}
+                          </span>
+                          <span className="font-semibold text-xs text-[var(--color-text-primary)] block mt-0.5">
+                            {inc.source}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          {isAuto ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                              <Sparkles className="w-3 h-3" /> Auto
+                            </span>
+                          ) : (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="!p-1.5 text-[var(--color-text-tertiary)]"
+                                onClick={() => setEditingIncome(inc)}
+                                title="Edit"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="!p-1.5 text-red-500"
+                                onClick={() => setDeleteIncomeItem(inc)}
+                                title="Delete"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs text-[var(--color-text-tertiary)] pt-1">
+                        <span className="inline-flex items-center gap-1 font-mono-num">
+                          <Calendar className="w-3 h-3" />
+                          {formatDate(inc.date)}
+                        </span>
+                        <span>{getBankName(inc.bankAccountId)}</span>
+                      </div>
+
+                      {inc.description && (
+                        <p className="text-xs text-[var(--color-text-secondary)] italic">
+                          {inc.description}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-[var(--color-border)] bg-[var(--color-bg-tertiary)]/80 text-[11px] font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
                     <th className="py-2.5 sm:py-3 px-2.5 sm:px-4">Date</th>
@@ -421,7 +487,8 @@ export default function IncomePage() {
                 </tbody>
               </table>
             </div>
-          )}
+          </>
+        )}
         </Card>
       )}
 

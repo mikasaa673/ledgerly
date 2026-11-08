@@ -116,6 +116,7 @@ export default function BusinessLending() {
   };
 
   const [showColumnConfig, setShowColumnConfig] = useState(false);
+  const [mobileViewMode, setMobileViewMode] = useState<'cards' | 'table'>('cards');
 
   // Edit Loan & Record Modal State
   const [showEditLoanModal, setShowEditLoanModal] = useState(false);
@@ -623,7 +624,35 @@ export default function BusinessLending() {
                 <span className="text-[10px] font-normal text-zinc-400 dark:text-zinc-500 sm:hidden ml-1">(Swipe &rarr;)</span>
               </h3>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              {/* Mobile View Toggle */}
+              <div className="flex md:hidden rounded-lg bg-zinc-200/70 dark:bg-zinc-800 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setMobileViewMode('cards')}
+                  className={cn(
+                    "px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors cursor-pointer",
+                    mobileViewMode === 'cards'
+                      ? "bg-white dark:bg-zinc-900 text-zinc-950 dark:text-zinc-50 shadow-xs"
+                      : "text-zinc-500 dark:text-zinc-400"
+                  )}
+                >
+                  Cards
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMobileViewMode('table')}
+                  className={cn(
+                    "px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors cursor-pointer",
+                    mobileViewMode === 'table'
+                      ? "bg-white dark:bg-zinc-900 text-zinc-950 dark:text-zinc-50 shadow-xs"
+                      : "text-zinc-500 dark:text-zinc-400"
+                  )}
+                >
+                  Table
+                </button>
+              </div>
+
               <Button
                 variant="secondary"
                 size="sm"
@@ -647,7 +676,180 @@ export default function BusinessLending() {
               }
             />
           ) : (
-            <div className="overflow-x-auto">
+            <>
+              {/* Mobile Cards View (md:hidden) */}
+              <div className={cn("divide-y divide-zinc-100 dark:divide-zinc-800", mobileViewMode === 'cards' ? "block md:hidden" : "hidden")}>
+                {displayRecords.map((rec) => {
+                  const loan = loanMap.get(rec.loanId);
+                  const isEmi = Boolean(loan && loan.monthlyInterest === 0);
+                  const due = rec.dueDate ? parseISO(rec.dueDate) : null;
+                  const isDueFutureMonth = due
+                    ? due.getFullYear() > selectedYear || (due.getFullYear() === selectedYear && (due.getMonth() + 1) > selectedMonth)
+                    : false;
+                  const isFullyRepaid = isEmi && !!loan && loan.principalRemaining <= 0;
+                  const effStatus = isDueFutureMonth && rec.collectedAmount === 0
+                    ? 'coming_soon'
+                    : getCollectionStatus(rec.dueDate, rec.collectedAmount, rec.expectedInterest, isFullyRepaid);
+
+                  return (
+                    <div key={`m-card-${rec.id}`} className="p-3.5 space-y-2.5 bg-white dark:bg-zinc-900">
+                      {/* Top Header: Amount & Status */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-base font-bold text-zinc-950 dark:text-zinc-50 font-mono-num">
+                              {formatCurrency(rec.principal)}
+                            </span>
+                            {loan?.isOthersMoney && (
+                              <span
+                                className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-900 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                                title={`Money borrowed from ${loan.othersName || 'Others'}`}
+                              >
+                                Others: {loan.othersName || 'Others'}
+                              </span>
+                            )}
+                          </div>
+                          {loan && loan.principalRemaining < loan.principal && (
+                            <span className="text-[11px] text-zinc-500 font-mono-num block mt-0.5">
+                              Remaining: {formatCurrency(loan.principalRemaining)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="shrink-0">
+                          {renderStatus(rec)}
+                        </div>
+                      </div>
+
+                      {/* 2x2 Key Info Grid */}
+                      <div className="grid grid-cols-2 gap-2 text-xs p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-100 dark:border-zinc-800/80">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-zinc-400 dark:text-zinc-500 block tracking-wider">
+                            Monthly Interest
+                          </span>
+                          <span className="font-bold text-zinc-900 dark:text-zinc-100 font-mono-num text-xs mt-0.5 block">
+                            {isEmi ? '0% EMI' : formatCurrency(rec.expectedInterest || loan?.monthlyInterest || 0)}
+                          </span>
+                        </div>
+
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-zinc-400 dark:text-zinc-500 block tracking-wider">
+                            Due Date
+                          </span>
+                          <span className="font-semibold text-zinc-800 dark:text-zinc-200 font-mono-num text-xs mt-0.5 inline-flex items-center gap-1">
+                            <Calendar className="w-3 h-3 text-zinc-400 shrink-0" />
+                            {formatDueDate(rec.dueDate)}
+                          </span>
+                        </div>
+
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-zinc-400 dark:text-zinc-500 block tracking-wider">
+                            Bank Account
+                          </span>
+                          <span className="text-xs text-zinc-700 dark:text-zinc-300 truncate block mt-0.5">
+                            {getBankName(rec.collectionBankAccountId || loan?.bankAccountId)}
+                          </span>
+                        </div>
+
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-zinc-400 dark:text-zinc-500 block tracking-wider">
+                            Collection Date
+                          </span>
+                          <span className="text-xs text-zinc-700 dark:text-zinc-300 block mt-0.5">
+                            {rec.collectionDate ? formatDate(rec.collectionDate) : '—'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {loan?.notes && (
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 italic px-0.5 line-clamp-2">
+                          Note: {loan.notes}
+                        </p>
+                      )}
+
+                      {/* Action Row */}
+                      <div className="flex items-center justify-between pt-1 border-t border-zinc-100 dark:border-zinc-800/60">
+                        <div className="flex items-center gap-1">
+                          {loan && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="!py-1 !px-2 text-xs text-zinc-600 dark:text-zinc-400"
+                              icon={<Pencil className="w-3.5 h-3.5" />}
+                              onClick={() => openEditLoan(loan, rec)}
+                            >
+                              Edit
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="!py-1 !px-2 text-xs text-zinc-600 dark:text-zinc-400"
+                            icon={<Eye className="w-3.5 h-3.5" />}
+                            onClick={() => openDetail(rec.loanId)}
+                          >
+                            Details
+                          </Button>
+                        </div>
+
+                        <div>
+                          {isEmi ? (
+                            effStatus === 'collected' ? (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                className="!py-1 !px-3 text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800"
+                                onClick={() => loan && openPrincipalRepayment(loan, rec)}
+                              >
+                                <Check className="w-3.5 h-3.5 mr-1" /> Repaid
+                              </Button>
+                            ) : isDueFutureMonth ? (
+                              <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">
+                                Due {due ? formatDueDate(rec.dueDate) : 'Next Month'}
+                              </span>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant={effStatus === 'pending' ? 'danger' : 'primary'}
+                                className="!py-1 !px-3 text-xs font-bold"
+                                icon={<ArrowDownLeft className="w-3.5 h-3.5" />}
+                                onClick={() => loan && openPrincipalRepayment(loan, rec)}
+                              >
+                                Repay EMI
+                              </Button>
+                            )
+                          ) : isDueFutureMonth ? (
+                            <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">
+                              Due {due ? formatDueDate(rec.dueDate) : 'Next Month'}
+                            </span>
+                          ) : effStatus !== 'collected' ? (
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              className="!py-1 !px-3.5 text-xs font-bold hover:!bg-emerald-600"
+                              icon={<Check className="w-3.5 h-3.5" />}
+                              onClick={() => openCollect(rec)}
+                            >
+                              Collect
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className="!py-1 !px-3 text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800"
+                              onClick={() => openCollect(rec)}
+                            >
+                              <Check className="w-3.5 h-3.5 mr-1" /> Paid
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Full Desktop / Mobile Scrollable Table View */}
+              <div className={cn("overflow-x-auto", mobileViewMode === 'cards' ? "hidden md:block" : "block")}>
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-zinc-200/80 bg-zinc-50 dark:bg-zinc-800/60 dark:border-zinc-800 text-xs sm:text-sm font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">
@@ -906,7 +1108,8 @@ export default function BusinessLending() {
                 </tfoot>
               </table>
             </div>
-          )}
+          </>
+        )}
         </div>
       ) : (
         /* ============================================================
@@ -924,7 +1127,117 @@ export default function BusinessLending() {
             </p>
           </div>
 
-          <div className="overflow-x-auto">
+          {/* Mobile Cards for All Loans */}
+          <div className="md:hidden divide-y divide-zinc-100 dark:divide-zinc-800">
+            {allLoans
+              .slice()
+              .sort((a, b) => (b.firstDueDate || '').localeCompare(a.firstDueDate || ''))
+              .map((loan) => (
+                <div key={`m-all-${loan.id}`} className="p-3.5 space-y-2.5 bg-white dark:bg-zinc-900">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-base font-bold text-zinc-950 dark:text-zinc-50 font-mono-num">
+                          {formatCurrency(loan.principal)}
+                        </span>
+                        {loan.isOthersMoney && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-900 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                            Others: {loan.othersName || 'Others'}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[11px] text-zinc-500 font-mono-num block mt-0.5">
+                        Remaining: {formatCurrency(loan.principalRemaining)}
+                      </span>
+                    </div>
+
+                    <span className={cn(
+                      "inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold",
+                      loan.status === 'active'
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60 dark:bg-emerald-950/40 dark:text-emerald-300"
+                        : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+                    )}>
+                      {loan.status === 'active' ? 'Active' : 'Closed'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-100 dark:border-zinc-800/80">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-zinc-400 block tracking-wider">
+                        Monthly Interest
+                      </span>
+                      <span className="font-bold text-zinc-900 dark:text-zinc-100 font-mono-num text-xs mt-0.5 block">
+                        {formatCurrency(loan.monthlyInterest)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-zinc-400 block tracking-wider">
+                        Due Date
+                      </span>
+                      <span className="font-semibold text-zinc-800 dark:text-zinc-200 font-mono-num text-xs mt-0.5 inline-flex items-center gap-1">
+                        <Calendar className="w-3 h-3 text-zinc-400 shrink-0" />
+                        {formatDueDate(loan.firstDueDate)}
+                      </span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-[10px] uppercase font-bold text-zinc-400 block tracking-wider">
+                        Bank Account
+                      </span>
+                      <span className="text-xs text-zinc-700 dark:text-zinc-300 truncate block mt-0.5">
+                        {getBankName(loan.bankAccountId)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 border-t border-zinc-100 dark:border-zinc-800/60">
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="!py-1 !px-2 text-xs text-zinc-600 dark:text-zinc-400"
+                        icon={<Pencil className="w-3.5 h-3.5" />}
+                        onClick={() => openEditLoan(loan)}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="!py-1 !px-2 text-xs text-zinc-600 dark:text-zinc-400"
+                        icon={<Eye className="w-3.5 h-3.5" />}
+                        onClick={() => openDetail(loan.id)}
+                      >
+                        Details
+                      </Button>
+                      <button
+                        type="button"
+                        className="p-1.5 rounded-lg text-zinc-400 hover:text-red-600 cursor-pointer"
+                        onClick={() => {
+                          setLoanToDelete(loan);
+                          setShowDeleteConfirm(true);
+                        }}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {loan.status === 'active' && loan.principalRemaining > 0 && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="!py-1 !px-3 text-xs font-semibold"
+                        icon={<ArrowDownLeft className="w-3.5 h-3.5" />}
+                        onClick={() => openPrincipalRepayment(loan)}
+                      >
+                        Return Principal
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+          </div>
+
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-zinc-200/80 bg-zinc-50 dark:bg-zinc-800/60 dark:border-zinc-800 text-xs sm:text-sm font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">

@@ -10,10 +10,12 @@ import { cloudSyncService } from '../services/cloudSyncService';
 interface AuthContextType {
   user: User | null;
   session: Session | null;
+  userName: string;
+  updateUserName: (name: string) => Promise<void>;
   loading: boolean;
   isConfigured: boolean;
   signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  signUp: (email: string, password: string) => Promise<{ success: boolean; error?: string; message?: string }>;
+  signUp: (email: string, password: string, fullName?: string) => Promise<{ success: boolean; error?: string; message?: string }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ success: boolean; error?: string; message?: string }>;
   isSyncing: boolean;
@@ -28,12 +30,50 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  const [userName, setUserName] = useState<string>(() => {
+    return (typeof window !== 'undefined' ? localStorage.getItem('ledgerly_user_name') : '') || '';
+  });
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(() => {
     return typeof window !== 'undefined' ? localStorage.getItem('ledgerly_cloud_synced_at') : null;
   });
   const [hasLocalData, setHasLocalData] = useState(false);
+
+  // Sync userName with user metadata
+  useEffect(() => {
+    if (user) {
+      const metaName = user.user_metadata?.full_name || user.user_metadata?.name;
+      if (metaName) {
+        setUserName(metaName);
+        localStorage.setItem('ledgerly_user_name', metaName);
+      }
+    }
+  }, [user]);
+
+  const updateUserName = useCallback(async (newName: string) => {
+    const trimmed = newName.trim();
+    setUserName(trimmed);
+    if (typeof window !== 'undefined') {
+      if (trimmed) {
+        localStorage.setItem('ledgerly_user_name', trimmed);
+      } else {
+        localStorage.removeItem('ledgerly_user_name');
+      }
+    }
+    if (supabase && user) {
+      try {
+        await supabase.auth.updateUser({
+          data: {
+            full_name: trimmed,
+            name: trimmed,
+          },
+        });
+      } catch (err) {
+        console.error('Failed to update name in Supabase:', err);
+      }
+    }
+  }, [user]);
 
   // Check if local data exists
   const checkLocalData = useCallback(async () => {
@@ -141,16 +181,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (email: string, password: string, fullName?: string) => {
     if (!supabase) return { success: false, error: 'Supabase is not configured' };
     try {
+      const trimmedName = fullName?.trim();
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
+        options: trimmedName
+          ? {
+              data: {
+                full_name: trimmedName,
+                name: trimmedName,
+              },
+            }
+          : undefined,
       });
 
       if (error) {
         return { success: false, error: error.message };
+      }
+
+      if (trimmedName) {
+        setUserName(trimmedName);
+        localStorage.setItem('ledgerly_user_name', trimmedName);
       }
 
       if (data.user && !data.session) {
@@ -207,6 +261,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         session,
+        userName,
+        updateUserName,
         loading,
         isConfigured: isSupabaseConfigured,
         signIn,

@@ -559,7 +559,85 @@ export default function LedgerPage() {
             <span className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300">Transaction Passbook</span>
             <span className="text-[10px] text-zinc-400 dark:text-zinc-500 sm:hidden">Swipe to see amounts &rarr;</span>
           </div>
-          <div className="overflow-x-auto">
+          {/* Mobile Passbook Cards (md:hidden) */}
+          <div className="md:hidden divide-y divide-zinc-100 dark:divide-zinc-800">
+            {filteredLogs.map((log) => {
+              const account = log.bankAccountId ? accountMap.get(log.bankAccountId) : undefined;
+              return (
+                <div
+                  key={`m-log-${log.id}`}
+                  onClick={() => setSelectedLog(log)}
+                  className="p-3.5 space-y-2 bg-white dark:bg-zinc-900 cursor-pointer active:bg-zinc-50 dark:active:bg-zinc-800/60"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-xs text-zinc-900 dark:text-zinc-100 font-mono-num">
+                          {formatDate(log.date)}
+                        </span>
+                        {log.timestamp && log.timestamp.includes('T') && (
+                          <span className="text-[10px] text-zinc-400 font-mono-num">
+                            {log.timestamp.split('T')[1].slice(0, 5)}
+                          </span>
+                        )}
+                        {getModuleBadge(log.module)}
+                      </div>
+                      <h4 className="text-xs font-bold text-zinc-950 dark:text-zinc-50 mt-1 leading-snug">
+                        {log.title}
+                      </h4>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      {log.flow === 'credit' && log.amount !== undefined ? (
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400 font-mono-num text-sm block">
+                          +{formatCurrency(log.amount)}
+                        </span>
+                      ) : log.flow === 'debit' && log.amount !== undefined ? (
+                        <span className="font-bold text-rose-600 dark:text-rose-400 font-mono-num text-sm block">
+                          −{formatCurrency(log.amount)}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-zinc-400 font-mono-num">—</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {log.description && (
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-1">
+                      {log.description}
+                    </p>
+                  )}
+
+                  <div className="flex items-center justify-between pt-1 border-t border-zinc-100 dark:border-zinc-800/60 text-xs">
+                    <span className="text-[11px] text-zinc-600 dark:text-zinc-400 truncate max-w-[200px]">
+                      {account ? `${account.nickname} (${account.bankName})` : 'Direct / Cash'}
+                    </span>
+                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedLog(log)}
+                        className="p-1 rounded text-zinc-400 hover:text-zinc-700"
+                        title="View Details"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLogToDelete(log)}
+                        className="p-1 rounded text-rose-500 hover:text-rose-700"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-900/80 text-[11px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
