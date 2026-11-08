@@ -6,6 +6,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, typ
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { cloudSyncService } from '../services/cloudSyncService';
+import { backupService } from '../services/backupService';
 
 interface AuthContextType {
   user: User | null;
@@ -149,6 +150,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (session?.user) {
         await cloudSyncService.pullFromCloud(session.user.id);
+      } else if (_event === 'SIGNED_OUT') {
+        // Completely wipe local database and credentials for security on sign out
+        await backupService.clearAllData();
+        setUserName('');
+        setLastSyncedAt(null);
+        setHasLocalData(false);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('ledgerly-data-reset'));
+          window.dispatchEvent(new CustomEvent('ledgerly-income-updated'));
+        }
       }
     });
 
@@ -226,11 +237,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    if (!supabase) return;
     try {
-      await supabase.auth.signOut();
+      if (supabase) {
+        await supabase.auth.signOut();
+      }
       setUser(null);
       setSession(null);
+      setUserName('');
+
+      // Wipe all local database tables for privacy and security on sign out
+      await backupService.clearAllData();
+
+      setLastSyncedAt(null);
+      setHasLocalData(false);
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('ledgerly-data-reset'));
+        window.dispatchEvent(new CustomEvent('ledgerly-income-updated'));
+      }
     } catch (err) {
       console.error('Sign out error:', err);
     }

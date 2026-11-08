@@ -295,7 +295,10 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 variant="danger"
                 size="sm"
                 icon={<LogOut className="w-3.5 h-3.5" />}
-                onClick={signOut}
+                onClick={async () => {
+                  await signOut();
+                  onClose();
+                }}
               >
                 Sign Out
               </Button>

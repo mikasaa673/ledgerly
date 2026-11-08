@@ -73,6 +73,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     refreshBankAccounts();
   }, [refreshBankAccounts]);
 
+  useEffect(() => {
+    const handleReset = async () => {
+      await refreshBankAccounts();
+      const freshSettings = await db.settings.get('app_settings');
+      if (freshSettings) setSettings(freshSettings);
+    };
+    window.addEventListener('ledgerly-data-reset', handleReset);
+    return () => window.removeEventListener('ledgerly-data-reset', handleReset);
+  }, [refreshBankAccounts]);
+
   const toggleTheme = useCallback(() => {
     setThemeState(prev => {
       const next = prev === 'dark' ? 'light' : 'dark';

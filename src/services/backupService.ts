@@ -297,7 +297,7 @@ export const backupService = {
       [db.bankAccounts, db.businessLoans, db.monthlyInterestRecords,
        db.principalRepayments, db.personalLoans, db.personalRepayments,
        db.expenses, db.incomes, db.bankTransfers, db.transactions,
-       db.customColumnValues, db.settings],
+       db.activityLogs, db.customColumnValues, db.settings],
       async () => {
         await db.bankAccounts.clear();
         await db.businessLoans.clear();
@@ -309,12 +309,15 @@ export const backupService = {
         await db.incomes.clear();
         await db.bankTransfers.clear();
         await db.transactions.clear();
+        await db.activityLogs.clear();
         await db.customColumnValues.clear();
         await db.settings.clear();
       }
     );
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem('ledgerly_demo_loaded');
+      localStorage.removeItem('ledgerly_user_name');
+      localStorage.removeItem('ledgerly_cloud_synced_at');
     }
     await initializeSettings();
   },
