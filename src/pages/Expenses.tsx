@@ -1,6 +1,6 @@
 // ============================================================
 // Ledgerly - Expenses Page
-// Dedicated Expense Tracker with Girlfriend & Family breakdown
+// Dedicated Expense Tracker with Sarayu & Family breakdown
 // ============================================================
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -83,7 +83,7 @@ export default function Expenses() {
   const [stats, setStats] = useState({
     total: 0,
     spentOnMe: 0,
-    spentOnGirlfriend: 0,
+    spentOnSarayu: 0,
     spentOnFamily: 0,
     spentOnOther: 0,
   });
@@ -105,13 +105,13 @@ export default function Expenses() {
       setCategoryBreakdown(catList);
 
       let onMe = 0;
-      let onGf = 0;
+      let onSarayu = 0;
       let onFam = 0;
       let onOth = 0;
 
       for (const item of spentForList) {
         if (item.spentFor === 'Me') onMe = item.total;
-        else if (item.spentFor === 'Girlfriend') onGf = item.total;
+        else if (item.spentFor === 'Sarayu' || item.spentFor === 'Girlfriend') onSarayu += item.total;
         else if (item.spentFor === 'Family') onFam = item.total;
         else onOth += item.total;
       }
@@ -119,7 +119,7 @@ export default function Expenses() {
       setStats({
         total: totalMonth,
         spentOnMe: onMe,
-        spentOnGirlfriend: onGf,
+        spentOnSarayu: onSarayu,
         spentOnFamily: onFam,
         spentOnOther: onOth,
       });
@@ -213,7 +213,7 @@ export default function Expenses() {
       {/* Header */}
       <PageHeader
         title="Expense Management"
-        description="Track daily expenses, categorize costs, and monitor spending for yourself, girlfriend, and family."
+        description="Track daily expenses, categorize costs, and monitor spending for yourself, Sarayu, and family."
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -305,8 +305,8 @@ export default function Expenses() {
           subtitle="Monthly total"
         />
         <StatCard
-          label="Spent on Girlfriend"
-          value={formatCurrency(stats.spentOnGirlfriend)}
+          label="Spent on Sarayu"
+          value={formatCurrency(stats.spentOnSarayu)}
           subtitle="Gifts, dining & personal"
         />
         <StatCard
@@ -467,21 +467,27 @@ export default function Expenses() {
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-[var(--color-bg-tertiary)] text-[var(--color-text-primary)] border border-[var(--color-border)]">
                             {exp.category}
                           </span>
-                          <span
-                            className={cn(
-                              'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold',
-                              exp.spentFor === 'Girlfriend' && 'bg-pink-500/10 text-pink-500 border border-pink-500/20',
-                              exp.spentFor === 'Me' && 'bg-blue-500/10 text-blue-500 border border-blue-500/20',
-                              exp.spentFor === 'Family' && 'bg-amber-500/10 text-amber-500 border border-amber-500/20',
-                              exp.spentFor !== 'Girlfriend' &&
-                                exp.spentFor !== 'Me' &&
-                                exp.spentFor !== 'Family' &&
-                                'bg-slate-500/10 text-slate-400'
-                            )}
-                          >
-                            {exp.spentFor === 'Girlfriend' && <Heart className="w-3 h-3" />}
-                            {exp.spentFor}
-                          </span>
+                          {(() => {
+                            const isSarayu = exp.spentFor === 'Sarayu' || exp.spentFor === 'Girlfriend';
+                            const displaySpent = exp.spentFor === 'Girlfriend' ? 'Sarayu' : exp.spentFor;
+                            return (
+                              <span
+                                className={cn(
+                                  'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold',
+                                  isSarayu && 'bg-pink-500/10 text-pink-500 border border-pink-500/20',
+                                  exp.spentFor === 'Me' && 'bg-blue-500/10 text-blue-500 border border-blue-500/20',
+                                  exp.spentFor === 'Family' && 'bg-amber-500/10 text-amber-500 border border-amber-500/20',
+                                  !isSarayu &&
+                                    exp.spentFor !== 'Me' &&
+                                    exp.spentFor !== 'Family' &&
+                                    'bg-slate-500/10 text-slate-400'
+                                )}
+                              >
+                                {isSarayu && <Heart className="w-3 h-3" />}
+                                {displaySpent}
+                              </span>
+                            );
+                          })()}
                         </div>
                       </div>
 
@@ -556,21 +562,27 @@ export default function Expenses() {
                         </span>
                       </td>
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        <span
-                          className={cn(
-                            'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold',
-                            exp.spentFor === 'Girlfriend' && 'bg-pink-500/10 text-pink-500 border border-pink-500/20',
-                            exp.spentFor === 'Me' && 'bg-blue-500/10 text-blue-500 border border-blue-500/20',
-                            exp.spentFor === 'Family' && 'bg-amber-500/10 text-amber-500 border border-amber-500/20',
-                            exp.spentFor !== 'Girlfriend' &&
-                              exp.spentFor !== 'Me' &&
-                              exp.spentFor !== 'Family' &&
-                              'bg-slate-500/10 text-slate-400'
-                          )}
-                        >
-                          {exp.spentFor === 'Girlfriend' && <Heart className="w-3 h-3" />}
-                          {exp.spentFor}
-                        </span>
+                        {(() => {
+                          const isSarayu = exp.spentFor === 'Sarayu' || exp.spentFor === 'Girlfriend';
+                          const displaySpent = exp.spentFor === 'Girlfriend' ? 'Sarayu' : exp.spentFor;
+                          return (
+                            <span
+                              className={cn(
+                                'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold',
+                                isSarayu && 'bg-pink-500/10 text-pink-500 border border-pink-500/20',
+                                exp.spentFor === 'Me' && 'bg-blue-500/10 text-blue-500 border border-blue-500/20',
+                                exp.spentFor === 'Family' && 'bg-amber-500/10 text-amber-500 border border-amber-500/20',
+                                !isSarayu &&
+                                  exp.spentFor !== 'Me' &&
+                                  exp.spentFor !== 'Family' &&
+                                  'bg-slate-500/10 text-slate-400'
+                              )}
+                            >
+                              {isSarayu && <Heart className="w-3 h-3" />}
+                              {displaySpent}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="py-3.5 px-4 text-xs text-[var(--color-text-secondary)] whitespace-nowrap">
                         {getBankName(exp.bankAccountId)}

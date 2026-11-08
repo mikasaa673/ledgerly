@@ -280,13 +280,13 @@ async function runTests() {
     hdfcBal = await bankAccountService.calculateBalance(hdfc.id);
     assert(hdfcBal === 45000, `HDFC balance increased back to ₹45,000 after ₹5,000 repayment (actual: ${hdfcBal})`);
 
-    // ── Test 7: Expenses & Girlfriend Spending ──
+    // ── Test 7: Expenses & Sarayu Spending ──
     console.log('\n--- 7. Testing Expenses ---');
     const exp1 = await expenseService.create({
       amount: 3500,
       bankAccountId: hdfc.id,
       category: 'Food',
-      spentFor: 'Girlfriend',
+      spentFor: 'Sarayu',
       date: '2026-11-03',
       description: 'Dinner date',
     });
@@ -303,8 +303,8 @@ async function runTests() {
     hdfcBal = await bankAccountService.calculateBalance(hdfc.id);
     assert(hdfcBal === 40000, `HDFC balance decreased by ₹5,000 expenses to ₹40,000 (actual: ${hdfcBal})`);
 
-    const gfSpend = await expenseService.getGirlfriendSpending(11, 2026);
-    assert(gfSpend === 3500, `Girlfriend spending correctly calculated as ₹3,500 (actual: ${gfSpend})`);
+    const sarayuSpend = await expenseService.getSarayuSpending(11, 2026);
+    assert(sarayuSpend === 3500, `Sarayu spending correctly calculated as ₹3,500 (actual: ${sarayuSpend})`);
 
     // ── Test 8: Internal Bank Transfer ──
     console.log('\n--- 8. Testing Internal Transfers ---');

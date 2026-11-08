@@ -147,7 +147,7 @@ export const expenseService = {
       .sort((a, b) => b.total - a.total);
   },
 
-  async getGirlfriendSpending(month?: number, year?: number): Promise<number> {
+  async getSarayuSpending(month?: number, year?: number): Promise<number> {
     let expenses: Expense[];
     if (month && year) {
       expenses = await this.getByMonth(month, year);
@@ -155,8 +155,12 @@ export const expenseService = {
       expenses = await this.getAll();
     }
     return expenses
-      .filter(e => e.spentFor === 'Girlfriend')
+      .filter(e => e.spentFor === 'Sarayu' || e.spentFor === 'Girlfriend')
       .reduce((sum, e) => sum + e.amount, 0);
+  },
+
+  async getGirlfriendSpending(month?: number, year?: number): Promise<number> {
+    return this.getSarayuSpending(month, year);
   },
 
   async search(query: string): Promise<Expense[]> {

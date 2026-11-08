@@ -170,7 +170,7 @@ export interface Expense {
   amount: number;
   bankAccountId?: ID; // Bank account (optional)
   category: string;
-  spentFor: string; // 'me' | 'girlfriend' | 'family' | 'other' | custom
+  spentFor: string; // 'me' | 'sarayu' | 'family' | 'other' | custom
   date: string; // ISO date string
   description?: string;
   createdAt: string;

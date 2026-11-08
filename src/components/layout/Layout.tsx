@@ -419,7 +419,7 @@ export default function Layout() {
                   Daily Expenses
                 </span>
                 <span className="text-zinc-500 dark:text-zinc-400">
-                  All logged expense items across personal, girlfriend, family & other categories.
+                  All logged expense items across personal, Sarayu, family & other categories.
                 </span>
               </div>
             </label>

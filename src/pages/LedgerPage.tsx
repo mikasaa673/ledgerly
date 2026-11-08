@@ -348,7 +348,6 @@ export default function LedgerPage() {
       {/* Page Header */}
       <PageHeader
         title="Audit Ledger & Activity Log"
-        description="Comprehensive verifiable audit trail of every financial movement, lending collection, expense, and bank activity."
         actions={
           <div className="flex items-center gap-2 flex-wrap">
             <Button

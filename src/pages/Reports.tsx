@@ -89,7 +89,7 @@ export default function Reports() {
     totalIncome: 0,
     totalExpenses: 0,
     netCashFlow: 0,
-    girlfriendSpending: 0,
+    sarayuSpending: 0,
     businessPrincipalLent: 0,
     businessPrincipalReturned: 0,
     personalLent: 0,
@@ -106,7 +106,7 @@ export default function Reports() {
     annualTotalIncome: 0,
     annualExpenses: 0,
     annualNetCashFlow: 0,
-    annualGirlfriendSpending: 0,
+    annualSarayuSpending: 0,
     outstandingPrincipal: 0,
     outstandingPersonal: 0,
     categoryBreakdown: [] as { category: string; total: number }[],
@@ -139,7 +139,7 @@ export default function Reports() {
         totExp,
         catBreak,
         spentForBreak,
-        gfSpend,
+        sarayuSpend,
         txs,
       ] = await Promise.all([
         businessLendingService.getInterestCollectedForMonth(selectedMonth, selectedYear),
@@ -148,7 +148,7 @@ export default function Reports() {
         expenseService.getTotalForMonth(selectedMonth, selectedYear),
         expenseService.getByCategory(selectedMonth, selectedYear),
         expenseService.getBySpentFor(selectedMonth, selectedYear),
-        expenseService.getGirlfriendSpending(selectedMonth, selectedYear),
+        expenseService.getSarayuSpending(selectedMonth, selectedYear),
         transactionService.getByMonth(selectedMonth, selectedYear),
       ]);
 
@@ -173,7 +173,7 @@ export default function Reports() {
         totalIncome: totInc,
         totalExpenses: totExp,
         netCashFlow: net,
-        girlfriendSpending: gfSpend,
+        sarayuSpending: sarayuSpend,
         businessPrincipalLent: bLent,
         businessPrincipalReturned: bReturned,
         personalLent: pLent,
@@ -198,22 +198,22 @@ export default function Reports() {
       let annExp = 0;
       const monthlyComp: { month: string; income: number; expenses: number; net: number }[] = [];
       const catMap = new Map<string, number>();
-      let annGf = 0;
+      let annSarayu = 0;
 
       for (let m = 1; m <= 12; m++) {
-        const [mInt, mOther, mExp, mCats, mGf] = await Promise.all([
+        const [mInt, mOther, mExp, mCats, mSarayu] = await Promise.all([
           businessLendingService.getInterestCollectedForMonth(m, selectedYear),
           incomeService.getNonInterestIncomeForMonth(m, selectedYear),
           expenseService.getTotalForMonth(m, selectedYear),
           expenseService.getByCategory(m, selectedYear),
-          expenseService.getGirlfriendSpending(m, selectedYear),
+          expenseService.getSarayuSpending(m, selectedYear),
         ]);
 
         const mInc = mInt + mOther;
         annInterest += mInt;
         annOther += mOther;
         annExp += mExp;
-        annGf += mGf;
+        annSarayu += mSarayu;
 
         mCats.forEach((c) => {
           catMap.set(c.category, (catMap.get(c.category) || 0) + c.total);
@@ -238,7 +238,7 @@ export default function Reports() {
         annualTotalIncome: annInterest + annOther,
         annualExpenses: annExp,
         annualNetCashFlow: annInterest + annOther - annExp,
-        annualGirlfriendSpending: annGf,
+        annualSarayuSpending: annSarayu,
         outstandingPrincipal: outPrinc,
         outstandingPersonal: outPers,
         categoryBreakdown: Array.from(catMap.entries())
@@ -352,7 +352,6 @@ export default function Reports() {
       {/* Page Header */}
       <PageHeader
         title="Financial Reports"
-        description="Audited breakdown of cash flows, lending yields, girlfriend spending, and balance distributions."
       />
 
       {/* Report Type Selector Tabs */}
@@ -462,8 +461,8 @@ export default function Reports() {
               subtitle="Income minus expenses"
             />
             <StatCard
-              label="Spent on Girlfriend"
-              value={formatCurrency(monthlyData.girlfriendSpending)}
+              label="Spent on Sarayu"
+              value={formatCurrency(monthlyData.sarayuSpending)}
               subtitle="Personal expenses"
             />
           </div>
@@ -518,15 +517,19 @@ export default function Reports() {
                 Spending by Recipient ({getMonthName(selectedMonth)})
               </h4>
               <div className="space-y-3 text-xs">
-                {monthlyData.spentForBreakdown.map((item) => (
-                  <div key={item.spentFor} className="flex justify-between p-2.5 rounded-lg bg-[var(--color-bg-tertiary)]">
-                    <span className="font-medium text-[var(--color-text-secondary)] flex items-center gap-1.5">
-                      {item.spentFor === 'Girlfriend' && <Heart className="w-3.5 h-3.5 text-pink-500" />}
-                      {item.spentFor}
-                    </span>
-                    <span className="font-bold text-[var(--color-text-primary)]">{formatCurrency(item.total)}</span>
-                  </div>
-                ))}
+                {monthlyData.spentForBreakdown.map((item) => {
+                  const isSarayu = item.spentFor === 'Sarayu' || item.spentFor === 'Girlfriend';
+                  const displayName = item.spentFor === 'Girlfriend' ? 'Sarayu' : item.spentFor;
+                  return (
+                    <div key={item.spentFor} className="flex justify-between p-2.5 rounded-lg bg-[var(--color-bg-tertiary)]">
+                      <span className="font-medium text-[var(--color-text-secondary)] flex items-center gap-1.5">
+                        {isSarayu && <Heart className="w-3.5 h-3.5 text-pink-500" />}
+                        {displayName}
+                      </span>
+                      <span className="font-bold text-[var(--color-text-primary)]">{formatCurrency(item.total)}</span>
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Individual Bank Balances */}
@@ -623,8 +626,8 @@ export default function Reports() {
               subtitle="Net profit for the year"
             />
             <StatCard
-              label="Annual Girlfriend Spending"
-              value={formatCurrency(yearlyData.annualGirlfriendSpending)}
+              label="Annual Sarayu Spending"
+              value={formatCurrency(yearlyData.annualSarayuSpending)}
               subtitle="Yearly total"
             />
           </div>

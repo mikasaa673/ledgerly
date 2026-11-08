@@ -122,7 +122,7 @@ interface DashboardData {
   interestIncomeMonth: number;
   otherIncomeMonth: number;
   spentOnMe: number;
-  spentOnGirlfriend: number;
+  spentOnSarayu: number;
   spentOnFamily: number;
 
   incomeVsExpensesData: { month: string; income: number; expenses: number }[];
@@ -291,17 +291,18 @@ export default function Dashboard() {
         .map(([name, value]) => ({ name, value }))
         .sort((a, b) => b.value - a.value);
 
-      // Spent For breakdown (Me, Girlfriend, Family, Other)
+      // Spent For breakdown (Me, Sarayu, Family, Other)
       const spentMap = new Map<string, number>();
       for (const e of expenses) {
-        spentMap.set(e.spentFor, (spentMap.get(e.spentFor) || 0) + e.amount);
+        const key = e.spentFor === 'Girlfriend' ? 'Sarayu' : e.spentFor;
+        spentMap.set(key, (spentMap.get(key) || 0) + e.amount);
       }
       const spentForData = Array.from(spentMap.entries())
         .map(([name, value]) => ({ name, value }))
         .sort((a, b) => b.value - a.value);
 
       const spentOnMe = spentMap.get('Me') || 0;
-      const spentOnGirlfriend = spentMap.get('Girlfriend') || 0;
+      const spentOnSarayu = spentMap.get('Sarayu') || 0;
       const spentOnFamily = spentMap.get('Family') || 0;
 
       // Bank balance distribution (only accounts with positive balance)
@@ -389,7 +390,7 @@ export default function Dashboard() {
         interestIncomeMonth,
         otherIncomeMonth,
         spentOnMe,
-        spentOnGirlfriend,
+        spentOnSarayu,
         spentOnFamily,
         incomeVsExpensesData,
         monthlyInterestData,
@@ -825,8 +826,8 @@ export default function Dashboard() {
             subtitle="Interest-free receivable"
           />
           <StatCard
-            label="Spent on Girlfriend"
-            value={formatCurrency(data.spentOnGirlfriend)}
+            label="Spent on Sarayu"
+            value={formatCurrency(data.spentOnSarayu)}
             subtitle="Gifts, dining & personal"
           />
           <StatCard

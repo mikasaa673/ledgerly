@@ -63,7 +63,21 @@ export const db = new LedgerlyDB();
 // Initialize default settings if not present
 export async function initializeSettings(): Promise<AppSettings> {
   const existing = await db.settings.get('app_settings');
-  if (existing) return existing;
+  if (existing) {
+    let updated = false;
+    if (existing.spentForOptions && existing.spentForOptions.includes('Girlfriend')) {
+      existing.spentForOptions = existing.spentForOptions.map(o => (o === 'Girlfriend' ? 'Sarayu' : o));
+      updated = true;
+    }
+    if (existing.expenseCategories && existing.expenseCategories.includes('Girlfriend')) {
+      existing.expenseCategories = existing.expenseCategories.map(c => (c === 'Girlfriend' ? 'Sarayu' : c));
+      updated = true;
+    }
+    if (updated) {
+      await db.settings.put(existing);
+    }
+    return existing;
+  }
 
   const defaultSettings: AppSettings = {
     id: 'app_settings',
@@ -80,7 +94,7 @@ export async function initializeSettings(): Promise<AppSettings> {
       'Gym / Fitness',
       'Medical',
       'Gifts',
-      'Girlfriend',
+      'Sarayu',
       'Family',
       'Education',
       'Subscriptions',
@@ -94,7 +108,7 @@ export async function initializeSettings(): Promise<AppSettings> {
     ],
     spentForOptions: [
       'Me',
-      'Girlfriend',
+      'Sarayu',
       'Family',
       'Other',
     ],
