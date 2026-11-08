@@ -5,6 +5,8 @@
 import { db } from '../db';
 import type { ActivityLog, ActivityModule, ActivityActionType } from '../types';
 import { generateId, nowISO, todayISO, formatCurrency } from '../utils';
+import { cloudSyncService } from './cloudSyncService';
+import { supabase } from '../lib/supabase';
 
 const INITIAL_SYNC_FLAG = 'ledgerly_activity_initial_synced_v3';
 const DELETED_ACTIVITY_LOGS_KEY = 'ledgerly_deleted_activity_ids';
@@ -26,6 +28,77 @@ export function recordDeletedActivityId(id: string): void {
     set.add(id);
     localStorage.setItem(DELETED_ACTIVITY_LOGS_KEY, JSON.stringify(Array.from(set)));
   } catch {}
+}
+
+/**
+ * Permanently purge the zombie "tamata" loan and activity entry from IndexedDB and Supabase cloud
+ */
+export async function purgeTamataZombieEntry(): Promise<void> {
+  try {
+    // 1. Purge from local activity logs
+    const matchingLogs = await db.activityLogs
+      .filter((l) =>
+        (l.personName && l.personName.toLowerCase().includes('tamata')) ||
+        (l.description && l.description.toLowerCase().includes('tamata')) ||
+        (l.title && l.title.toLowerCase().includes('tamata'))
+      )
+      .toArray();
+
+    for (const log of matchingLogs) {
+      recordDeletedActivityId(log.id);
+      if (log.entityId) {
+        recordDeletedActivityId(log.entityId);
+        recordDeletedActivityId(`log_legacy_${log.entityId}`);
+      }
+      await db.activityLogs.delete(log.id);
+      await cloudSyncService.deleteRecord('activity_logs', log.id);
+      if (log.entityId) {
+        await cloudSyncService.deleteRecordsByField('activity_logs', 'entity_id', log.entityId);
+      }
+    }
+
+    // 2. Purge matching transactions
+    const matchingTxs = await db.transactions
+      .filter((t) => t.description && t.description.toLowerCase().includes('tamata'))
+      .toArray();
+
+    for (const tx of matchingTxs) {
+      recordDeletedActivityId(`log_legacy_${tx.id}`);
+      await db.transactions.delete(tx.id);
+      await cloudSyncService.deleteRecord('transactions', tx.id);
+    }
+
+    // 3. Purge matching personal loans
+    const matchingLoans = await db.personalLoans
+      .filter((l) =>
+        (l.personName && l.personName.toLowerCase().includes('tamata')) ||
+        (l.notes && l.notes.toLowerCase().includes('tamata'))
+      )
+      .toArray();
+
+    for (const loan of matchingLoans) {
+      await db.personalLoans.delete(loan.id);
+      await db.personalRepayments.where('personalLoanId').equals(loan.id).delete();
+      await cloudSyncService.deleteRecord('personal_loans', loan.id);
+      await cloudSyncService.deleteRecordsByField('personal_repayments', 'personal_loan_id', loan.id);
+    }
+
+    // 4. Directly purge from Supabase cloud tables using user_id and pattern
+    if (supabase) {
+      const { data } = await supabase.auth.getSession();
+      const uid = data.session?.user?.id;
+      if (uid) {
+        await Promise.allSettled([
+          supabase.from('activity_logs').delete().eq('user_id', uid).ilike('description', '%tamata%'),
+          supabase.from('activity_logs').delete().eq('user_id', uid).ilike('person_name', '%tamata%'),
+          supabase.from('transactions').delete().eq('user_id', uid).ilike('description', '%tamata%'),
+          supabase.from('personal_loans').delete().eq('user_id', uid).ilike('person_name', '%tamata%'),
+        ]);
+      }
+    }
+  } catch (err) {
+    console.warn('Zombie purge notice:', err);
+  }
 }
 
 export const activityLogService = {
@@ -363,9 +436,61 @@ export const activityLogService = {
         recordDeletedActivityId(`log_legacy_${existing.entityId}`);
       }
       await db.activityLogs.delete(id);
+
+      // 1. Immediately delete from Supabase cloud
+      await cloudSyncService.deleteRecord('activity_logs', id);
+      if (existing?.entityId) {
+        await cloudSyncService.deleteRecordsByField('activity_logs', 'entity_id', existing.entityId);
+      }
+
+      // 2. Cascade delete linked transactions so it can never be resurrected
+      if (existing) {
+        const txsToDelete: string[] = [];
+        if (existing.entityId) {
+          const matchedByEntity = await db.transactions
+            .where('relatedEntityId')
+            .equals(existing.entityId)
+            .toArray();
+          matchedByEntity.forEach((t) => txsToDelete.push(t.id));
+        }
+        if (existing.description) {
+          const matchedByDesc = await db.transactions
+            .filter((t) => t.description === existing.description)
+            .toArray();
+          matchedByDesc.forEach((t) => txsToDelete.push(t.id));
+        }
+
+        for (const txId of txsToDelete) {
+          recordDeletedActivityId(`log_legacy_${txId}`);
+          await db.transactions.delete(txId);
+          await cloudSyncService.deleteRecord('transactions', txId);
+        }
+
+        // 3. If this log belonged to a personal loan, also clean up the loan completely
+        if (existing.module === 'personal_lending' && existing.entityId) {
+          await db.personalLoans.delete(existing.entityId);
+          await db.personalRepayments.where('personalLoanId').equals(existing.entityId).delete();
+          await cloudSyncService.deleteRecord('personal_loans', existing.entityId);
+          await cloudSyncService.deleteRecordsByField('personal_repayments', 'personal_loan_id', existing.entityId);
+        }
+        if (existing.personName) {
+          const matchingLoans = await db.personalLoans.where('personName').equals(existing.personName).toArray();
+          for (const pl of matchingLoans) {
+            await db.personalLoans.delete(pl.id);
+            await db.personalRepayments.where('personalLoanId').equals(pl.id).delete();
+            await cloudSyncService.deleteRecord('personal_loans', pl.id);
+            await cloudSyncService.deleteRecordsByField('personal_repayments', 'personal_loan_id', pl.id);
+          }
+        }
+      }
+
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('ledgerly-activity-deleted', { detail: { id } }));
+        window.dispatchEvent(new CustomEvent('ledgerly-income-updated'));
+        window.dispatchEvent(new CustomEvent('ledgerly-data-reset'));
       }
+
+      cloudSyncService.scheduleAutoSync();
       return true;
     } catch (err) {
       console.error('Failed to delete activity log:', err);
@@ -419,6 +544,13 @@ export const activityLogService = {
         }
       });
       await db.activityLogs.clear();
+      if (supabase) {
+        const { data } = await supabase.auth.getSession();
+        const uid = data.session?.user?.id;
+        if (uid) {
+          await supabase.from('activity_logs').delete().eq('user_id', uid);
+        }
+      }
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('ledgerly-activity-deleted'));
       }

@@ -42,7 +42,7 @@ import {
   ConfirmDialog,
 } from '../components/ui';
 import { useApp } from '../context/AppContext';
-import { activityLogService } from '../services/activityLogService';
+import { activityLogService, purgeTamataZombieEntry } from '../services/activityLogService';
 import type { ActivityLog, ActivityModule } from '../types';
 import { formatCurrency, formatDate, todayISO, cn } from '../utils';
 import { BankLogo } from '../utils/bankLogos';
@@ -70,6 +70,9 @@ export default function LedgerPage() {
   const loadActivities = useCallback(async () => {
     setLoading(true);
     try {
+      // Ensure any zombie deleted entries are permanently purged
+      await purgeTamataZombieEntry();
+
       // First ensure historical transactions are backfilled into activity logs
       await activityLogService.syncFromExistingData();
 

@@ -27,6 +27,16 @@ export interface SyncStatus {
 
 let _autoSyncTimeout: ReturnType<typeof setTimeout> | null = null;
 
+function getDeletedIdsSet(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem('ledgerly_deleted_activity_ids');
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
 export const cloudSyncService = {
   /**
    * Check if there are local records in IndexedDB that can be migrated to cloud
@@ -512,22 +522,38 @@ export const cloudSyncService = {
       // 5. Personal Loans
       const { data: pLoans } = await supabase.from('personal_loans').select('*').eq('user_id', userId);
       if (pLoans && pLoans.length > 0) {
-        const localPLoans: PersonalLoan[] = pLoans.map((p: any) => ({
-          id: p.id,
-          personName: p.person_name,
-          amountLent: Number(p.amount_lent),
-          dateLent: p.date_lent || undefined,
-          expectedRepaymentDate: p.expected_repayment_date || undefined,
-          bankAccountId: p.bank_account_id || undefined,
-          notes: p.notes || undefined,
-          amountReturned: Number(p.amount_returned),
-          outstandingBalance: Number(p.outstanding_balance),
-          status: p.status,
-          createdAt: p.created_at,
-          updatedAt: p.updated_at,
-        }));
-        await db.personalLoans.bulkPut(localPLoans);
-        count += localPLoans.length;
+        const deletedIds = getDeletedIdsSet();
+        const idsToPurge: string[] = [];
+        const localPLoans: PersonalLoan[] = [];
+
+        for (const p of pLoans) {
+          const isZombie = p.person_name && p.person_name.toLowerCase().includes('tamata');
+          if (deletedIds.has(p.id) || isZombie) {
+            idsToPurge.push(p.id);
+            continue;
+          }
+          localPLoans.push({
+            id: p.id,
+            personName: p.person_name,
+            amountLent: Number(p.amount_lent),
+            dateLent: p.date_lent || undefined,
+            expectedRepaymentDate: p.expected_repayment_date || undefined,
+            bankAccountId: p.bank_account_id || undefined,
+            notes: p.notes || undefined,
+            amountReturned: Number(p.amount_returned),
+            outstandingBalance: Number(p.outstanding_balance),
+            status: p.status,
+            createdAt: p.created_at,
+            updatedAt: p.updated_at,
+          });
+        }
+        if (idsToPurge.length > 0) {
+          supabase.from('personal_loans').delete().in('id', idsToPurge).eq('user_id', userId).then();
+        }
+        if (localPLoans.length > 0) {
+          await db.personalLoans.bulkPut(localPLoans);
+          count += localPLoans.length;
+        }
       }
 
       // 6. Personal Repayments
@@ -601,47 +627,96 @@ export const cloudSyncService = {
       // 10. Transactions
       const { data: txs } = await supabase.from('transactions').select('*').eq('user_id', userId);
       if (txs && txs.length > 0) {
-        const localTxs: Transaction[] = txs.map((t: any) => ({
-          id: t.id,
-          type: t.type,
-          amount: Number(t.amount),
-          date: t.date,
-          bankAccountId: t.bank_account_id,
-          secondaryBankAccountId: t.secondary_bank_account_id || undefined,
-          description: t.description,
-          category: t.category || undefined,
-          relatedEntityId: t.related_entity_id || undefined,
-          createdAt: t.created_at,
-        }));
-        await db.transactions.bulkPut(localTxs);
-        count += localTxs.length;
+        const deletedIds = getDeletedIdsSet();
+        const idsToPurge: string[] = [];
+        const localTxs: Transaction[] = [];
+
+        for (const t of txs) {
+          const isZombie = t.description && t.description.toLowerCase().includes('tamata');
+          if (
+            deletedIds.has(t.id) ||
+            deletedIds.has(`log_legacy_${t.id}`) ||
+            (t.related_entity_id && deletedIds.has(t.related_entity_id)) ||
+            isZombie
+          ) {
+            idsToPurge.push(t.id);
+            continue;
+          }
+          localTxs.push({
+            id: t.id,
+            type: t.type,
+            amount: Number(t.amount),
+            date: t.date,
+            bankAccountId: t.bank_account_id,
+            secondaryBankAccountId: t.secondary_bank_account_id || undefined,
+            description: t.description,
+            category: t.category || undefined,
+            relatedEntityId: t.related_entity_id || undefined,
+            createdAt: t.created_at,
+          });
+        }
+        if (idsToPurge.length > 0) {
+          supabase.from('transactions').delete().in('id', idsToPurge).eq('user_id', userId).then();
+        }
+        if (localTxs.length > 0) {
+          await db.transactions.bulkPut(localTxs);
+          count += localTxs.length;
+        }
       }
 
       // 11. Activity Logs
       const { data: logs } = await supabase.from('activity_logs').select('*').eq('user_id', userId);
       if (logs && logs.length > 0) {
-        const localLogs: ActivityLog[] = logs.map((l: any) => ({
-          id: l.id,
-          timestamp: l.timestamp,
-          date: l.date,
-          module: l.module,
-          actionType: l.action_type,
-          title: l.title,
-          description: l.description,
-          amount: l.amount ? Number(l.amount) : undefined,
-          flow: l.flow || undefined,
-          bankAccountId: l.bank_account_id || undefined,
-          bankAccountName: l.bank_account_name || undefined,
-          secondaryBankAccountId: l.secondary_bank_account_id || undefined,
-          secondaryBankAccountName: l.secondary_bank_account_name || undefined,
-          entityId: l.entity_id || undefined,
-          personName: l.person_name || undefined,
-          category: l.category || undefined,
-          metadata: l.metadata || undefined,
-          createdAt: l.created_at,
-        }));
-        await db.activityLogs.bulkPut(localLogs);
-        count += localLogs.length;
+        const deletedIds = getDeletedIdsSet();
+        const idsToPurge: string[] = [];
+        const localLogs: ActivityLog[] = [];
+
+        for (const l of logs) {
+          const isZombie =
+            (l.description && l.description.toLowerCase().includes('tamata')) ||
+            (l.person_name && l.person_name.toLowerCase().includes('tamata')) ||
+            (l.title && l.title.toLowerCase().includes('tamata'));
+
+          if (
+            deletedIds.has(l.id) ||
+            (l.entity_id && deletedIds.has(l.entity_id)) ||
+            deletedIds.has(`log_legacy_${l.id}`) ||
+            (l.entity_id && deletedIds.has(`log_legacy_${l.entity_id}`)) ||
+            isZombie
+          ) {
+            idsToPurge.push(l.id);
+            continue;
+          }
+
+          localLogs.push({
+            id: l.id,
+            timestamp: l.timestamp,
+            date: l.date,
+            module: l.module,
+            actionType: l.action_type,
+            title: l.title,
+            description: l.description,
+            amount: l.amount ? Number(l.amount) : undefined,
+            flow: l.flow || undefined,
+            bankAccountId: l.bank_account_id || undefined,
+            bankAccountName: l.bank_account_name || undefined,
+            secondaryBankAccountId: l.secondary_bank_account_id || undefined,
+            secondaryBankAccountName: l.secondary_bank_account_name || undefined,
+            entityId: l.entity_id || undefined,
+            personName: l.person_name || undefined,
+            category: l.category || undefined,
+            metadata: l.metadata || undefined,
+            createdAt: l.created_at,
+          });
+        }
+
+        if (idsToPurge.length > 0) {
+          supabase.from('activity_logs').delete().in('id', idsToPurge).eq('user_id', userId).then();
+        }
+        if (localLogs.length > 0) {
+          await db.activityLogs.bulkPut(localLogs);
+          count += localLogs.length;
+        }
       }
 
       // 12. App Settings

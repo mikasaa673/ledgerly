@@ -5,7 +5,8 @@
 import { db } from '../db';
 import type { PersonalLoan, PersonalRepayment, Transaction } from '../types';
 import { generateId, nowISO } from '../utils';
-import { activityLogService } from './activityLogService';
+import { activityLogService, recordDeletedActivityId } from './activityLogService';
+import { cloudSyncService } from './cloudSyncService';
 
 export const personalLendingService = {
   async getAll(): Promise<PersonalLoan[]> {
@@ -183,7 +184,61 @@ export const personalLendingService = {
   },
 
   async deleteLoan(id: string): Promise<void> {
-    await db.personalLoans.update(id, { status: 'archived', updatedAt: nowISO() });
+    const loan = await db.personalLoans.get(id);
+    await db.transaction(
+      'rw',
+      [db.personalLoans, db.personalRepayments, db.transactions, db.activityLogs],
+      async () => {
+        // 1. Delete personal loan
+        await db.personalLoans.delete(id);
+
+        // 2. Delete repayments
+        await db.personalRepayments.where('personalLoanId').equals(id).delete();
+
+        // 3. Delete transactions
+        const txs = await db.transactions
+          .where('relatedEntityId')
+          .equals(id)
+          .filter((t) => t.type === 'personal_lent' || t.type === 'personal_repayment')
+          .toArray();
+        for (const tx of txs) {
+          recordDeletedActivityId(`log_legacy_${tx.id}`);
+          await db.transactions.delete(tx.id);
+          await cloudSyncService.deleteRecord('transactions', tx.id);
+        }
+
+        // 4. Delete activity logs
+        const logs = await db.activityLogs.where('entityId').equals(id).toArray();
+        for (const l of logs) {
+          recordDeletedActivityId(l.id);
+          await db.activityLogs.delete(l.id);
+          await cloudSyncService.deleteRecord('activity_logs', l.id);
+        }
+        if (loan?.personName) {
+          const nameLogs = await db.activityLogs
+            .filter((l) => l.personName === loan.personName || l.description?.includes(loan.personName))
+            .toArray();
+          for (const l of nameLogs) {
+            recordDeletedActivityId(l.id);
+            await db.activityLogs.delete(l.id);
+            await cloudSyncService.deleteRecord('activity_logs', l.id);
+          }
+        }
+      }
+    );
+
+    // Clean up from Supabase cloud
+    await cloudSyncService.deleteRecord('personal_loans', id);
+    await cloudSyncService.deleteRecordsByField('personal_repayments', 'personal_loan_id', id);
+    await cloudSyncService.deleteRecordsByField('transactions', 'related_entity_id', id);
+    await cloudSyncService.deleteRecordsByField('activity_logs', 'entity_id', id);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ledgerly-data-reset'));
+      window.dispatchEvent(new CustomEvent('ledgerly-activity-deleted'));
+    }
+
+    cloudSyncService.scheduleAutoSync();
   },
 
   // Aggregations
