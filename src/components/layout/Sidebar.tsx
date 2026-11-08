@@ -180,7 +180,7 @@ export default function Sidebar() {
                 </div>
                 <div className="min-w-0">
                   <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate block">
-                    {user ? 'Cloud Synced' : 'Sync Phone & Laptop'}
+                    {user ? 'Cloud Synced' : 'Cloud Sync'}
                   </span>
                   <span className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate block">
                     {user ? user.email : 'Click to Sign In / Connect'}

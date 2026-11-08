@@ -170,7 +170,7 @@ export default function Layout() {
               type="button"
               onClick={() => setShowAuthModal(true)}
               className="flex items-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-semibold transition-all shadow-xs cursor-pointer"
-              title={user ? `Signed in as ${user.email} (Click to manage sync)` : 'Sign in to sync across Phone & Laptop'}
+              title={user ? `Signed in as ${user.email} (Click to manage sync)` : 'Sign in to sync your ledger'}
             >
               <Cloud className={cn("w-3.5 h-3.5", user ? "text-emerald-500" : "text-blue-500")} />
               <span className="hidden sm:inline">{user ? 'Synced' : 'Cloud Sync'}</span>

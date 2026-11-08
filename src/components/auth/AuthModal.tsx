@@ -27,8 +27,6 @@ import {
   ArrowUpRight,
   Key,
   ShieldCheck,
-  Smartphone,
-  Laptop,
   User,
 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -197,7 +195,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 Ledgerly Cloud Sync
               </h4>
               <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                Use Ledgerly across Phone &amp; Laptop seamlessly
+                Secure Cloud Synchronization
               </p>
             </div>
           </div>
@@ -244,18 +242,6 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
               </Button>
             </div>
 
-            {/* Sync Features Highlight */}
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="p-2.5 rounded-lg border border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900/40 flex items-center gap-2">
-                <Smartphone className="w-4 h-4 text-emerald-500 shrink-0" />
-                <span className="text-zinc-700 dark:text-zinc-300 font-medium">Syncs with Phone</span>
-              </div>
-              <div className="p-2.5 rounded-lg border border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900/40 flex items-center gap-2">
-                <Laptop className="w-4 h-4 text-blue-500 shrink-0" />
-                <span className="text-zinc-700 dark:text-zinc-300 font-medium">Syncs with Laptop</span>
-              </div>
-            </div>
-
             {/* Local Data Upload Prompt */}
             {hasLocalData && (
               <div className="p-3.5 rounded-xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/60 dark:bg-blue-950/30 space-y-2">
@@ -266,7 +252,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                       Existing Local Records Found
                     </h5>
                     <p className="text-[11px] text-blue-800/90 dark:text-blue-300/90 mt-0.5">
-                      Upload your current bank accounts, loans, and passbook entries to your cloud account so they appear on your phone too.
+                      Upload your current bank accounts, loans, and passbook entries to your cloud account.
                     </p>
                   </div>
                 </div>

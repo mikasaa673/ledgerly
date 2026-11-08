@@ -260,7 +260,7 @@ export async function loadDemoData(): Promise<void> {
       dateLent: `${currentYear}-${String(currentMonth).padStart(2, '0')}-03`,
       expectedRepaymentDate: `${currentYear}-${String(currentMonth).padStart(2, '0')}-30`,
       bankAccountId: accHdfcId,
-      notes: 'Laptop purchase support',
+      notes: 'Computer purchase support',
       amountReturned: 0,
       outstandingBalance: 8000,
       status: 'active',

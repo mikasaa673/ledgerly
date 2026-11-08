@@ -24,8 +24,6 @@ import {
   Sliders,
   RotateCcw,
   Cloud,
-  Smartphone,
-  Laptop,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
@@ -470,29 +468,22 @@ export default function SettingsPage() {
         </div>
 
         <p className="text-xs text-[var(--color-text-secondary)]">
-          Connect your free Supabase cloud database to use Ledgerly simultaneously on your Phone and Laptop. Your entries sync securely with Row-Level Security.
+          Connect your Supabase cloud account to sync and protect your ledger records with Row-Level Security.
         </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 text-xs">
           <div className="p-3 rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/60 flex items-center gap-2.5">
-            <Smartphone className="w-4 h-4 text-emerald-500 shrink-0" />
+            <Cloud className="w-4 h-4 text-emerald-500 shrink-0" />
             <div>
-              <p className="font-semibold text-zinc-900 dark:text-zinc-100">Mobile Phone</p>
-              <p className="text-[10px] text-zinc-500">Record loans on the go</p>
-            </div>
-          </div>
-          <div className="p-3 rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/60 flex items-center gap-2.5">
-            <Laptop className="w-4 h-4 text-blue-500 shrink-0" />
-            <div>
-              <p className="font-semibold text-zinc-900 dark:text-zinc-100">Laptop / Desktop</p>
-              <p className="text-[10px] text-zinc-500">Analyze passbook at home</p>
+              <p className="font-semibold text-zinc-900 dark:text-zinc-100">Cloud Sync Status</p>
+              <p className="text-[10px] text-zinc-500">{user ? 'Active & Synchronized' : 'Not Signed In'}</p>
             </div>
           </div>
           <div className="p-3 rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/60 flex items-center gap-2.5">
             <ShieldCheck className="w-4 h-4 text-indigo-500 shrink-0" />
             <div>
-              <p className="font-semibold text-zinc-900 dark:text-zinc-100">Status</p>
-              <p className="text-[10px] text-zinc-500 truncate max-w-[140px]">{user ? user.email : 'Local Only (Not Signed In)'}</p>
+              <p className="font-semibold text-zinc-900 dark:text-zinc-100">Account</p>
+              <p className="text-[10px] text-zinc-500 truncate max-w-[180px]">{user ? user.email : 'Not Signed In'}</p>
             </div>
           </div>
         </div>

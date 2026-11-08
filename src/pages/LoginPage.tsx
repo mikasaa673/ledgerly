@@ -19,8 +19,6 @@ import {
   Key,
   Moon,
   Sun,
-  Laptop,
-  Smartphone,
   Briefcase,
 } from 'lucide-react';
 import { Button } from '../components/ui';
@@ -397,18 +395,6 @@ export default function LoginPage() {
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
               <span>Protected by Row-Level Security (RLS). Only your account can view your ledger.</span>
             </p>
-          </div>
-        </div>
-
-        {/* Feature Pills under the card */}
-        <div className="grid grid-cols-2 gap-2 mt-4 text-xs">
-          <div className="p-2.5 rounded-xl border border-zinc-200/60 dark:border-zinc-800/60 bg-white/60 dark:bg-zinc-900/40 flex items-center gap-2">
-            <Smartphone className="w-4 h-4 text-emerald-500 shrink-0" />
-            <span className="text-zinc-600 dark:text-zinc-400 text-[11px] font-medium">Use on Phone</span>
-          </div>
-          <div className="p-2.5 rounded-xl border border-zinc-200/60 dark:border-zinc-800/60 bg-white/60 dark:bg-zinc-900/40 flex items-center gap-2">
-            <Laptop className="w-4 h-4 text-blue-500 shrink-0" />
-            <span className="text-zinc-600 dark:text-zinc-400 text-[11px] font-medium">Use on Laptop</span>
           </div>
         </div>
       </div>
