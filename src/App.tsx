@@ -7,6 +7,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
+import AuthGuard from './components/auth/AuthGuard';
 import Layout from './components/layout/Layout';
 
 // Pages
@@ -24,24 +25,26 @@ export default function App() {
   return (
     <AuthProvider>
       <AppProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Layout />}>
-              {/* Primary Landing Page: Business Lending */}
-              <Route index element={<BusinessLending />} />
-              <Route path="business-lending" element={<BusinessLending />} />
-              <Route path="dashboard" element={<Dashboard />} />
-              <Route path="personal-lending" element={<PersonalLending />} />
-              <Route path="expenses" element={<Expenses />} />
-              <Route path="income" element={<IncomePage />} />
-              <Route path="bank-accounts" element={<BankAccounts />} />
-              <Route path="ledger" element={<LedgerPage />} />
-              <Route path="reports" element={<Reports />} />
-              <Route path="settings" element={<SettingsPage />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Route>
-          </Routes>
-        </BrowserRouter>
+        <AuthGuard>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<Layout />}>
+                {/* Primary Landing Page: Business Lending */}
+                <Route index element={<BusinessLending />} />
+                <Route path="business-lending" element={<BusinessLending />} />
+                <Route path="dashboard" element={<Dashboard />} />
+                <Route path="personal-lending" element={<PersonalLending />} />
+                <Route path="expenses" element={<Expenses />} />
+                <Route path="income" element={<IncomePage />} />
+                <Route path="bank-accounts" element={<BankAccounts />} />
+                <Route path="ledger" element={<LedgerPage />} />
+                <Route path="reports" element={<Reports />} />
+                <Route path="settings" element={<SettingsPage />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Route>
+            </Routes>
+          </BrowserRouter>
+        </AuthGuard>
       </AppProvider>
     </AuthProvider>
   );
