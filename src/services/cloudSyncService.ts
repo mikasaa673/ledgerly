@@ -25,6 +25,8 @@ export interface SyncStatus {
   error: string | null;
 }
 
+let _autoSyncTimeout: ReturnType<typeof setTimeout> | null = null;
+
 export const cloudSyncService = {
   /**
    * Check if there are local records in IndexedDB that can be migrated to cloud
@@ -325,6 +327,23 @@ export const cloudSyncService = {
         totalCount += logs.length;
       }
 
+      // 12. App Settings
+      const appSettings = await db.settings.get('app_settings');
+      if (appSettings) {
+        const { error } = await supabase.from('app_settings').upsert(
+          {
+            id: 'app_settings',
+            user_id: userId,
+            settings: appSettings,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'id,user_id' }
+        );
+        if (error) {
+          console.warn('Failed to sync app_settings:', error.message);
+        }
+      }
+
       if (typeof window !== 'undefined') {
         localStorage.setItem('ledgerly_cloud_synced_at', new Date().toISOString());
       }
@@ -333,6 +352,67 @@ export const cloudSyncService = {
     } catch (err: any) {
       console.error('Failed to migrate local data to cloud:', err);
       return { success: false, count: 0, error: err.message || 'Migration error' };
+    }
+  },
+
+  /**
+   * Push local data to cloud (alias with auto-sync support)
+   */
+  async pushLocalToCloud(userId: string): Promise<{ success: boolean; count: number; error?: string }> {
+    return this.migrateLocalDataToCloud(userId);
+  },
+
+  /**
+   * Trigger a non-blocking debounced auto-sync to cloud when data changes locally
+   */
+  scheduleAutoSync(userId?: string) {
+    if (!supabase) return;
+    if (_autoSyncTimeout) {
+      clearTimeout(_autoSyncTimeout);
+    }
+    _autoSyncTimeout = setTimeout(async () => {
+      try {
+        let uid = userId;
+        if (!uid) {
+          const { data } = await supabase.auth.getSession();
+          uid = data.session?.user?.id;
+        }
+        if (uid) {
+          await this.pushLocalToCloud(uid);
+        }
+      } catch (err) {
+        console.warn('Auto cloud sync notice:', err);
+      }
+    }, 1500);
+  },
+
+  /**
+   * Delete an entity from Supabase immediately so it won't resurrect on pull
+   */
+  async deleteRecord(table: string, id: string): Promise<void> {
+    if (!supabase) return;
+    try {
+      const { data } = await supabase.auth.getSession();
+      const uid = data.session?.user?.id;
+      if (!uid) return;
+      await supabase.from(table).delete().eq('id', id).eq('user_id', uid);
+    } catch (err) {
+      console.warn(`Failed to delete record ${id} from cloud ${table}:`, err);
+    }
+  },
+
+  /**
+   * Delete multiple records by field from Supabase
+   */
+  async deleteRecordsByField(table: string, field: string, value: string): Promise<void> {
+    if (!supabase) return;
+    try {
+      const { data } = await supabase.auth.getSession();
+      const uid = data.session?.user?.id;
+      if (!uid) return;
+      await supabase.from(table).delete().eq(field, value).eq('user_id', uid);
+    } catch (err) {
+      console.warn(`Failed to delete from cloud ${table} where ${field}=${value}:`, err);
     }
   },
 
@@ -562,6 +642,20 @@ export const cloudSyncService = {
         }));
         await db.activityLogs.bulkPut(localLogs);
         count += localLogs.length;
+      }
+
+      // 12. App Settings
+      try {
+        const { data: sData } = await supabase
+          .from('app_settings')
+          .select('settings')
+          .eq('user_id', userId)
+          .maybeSingle();
+        if (sData?.settings) {
+          await db.settings.put(sData.settings);
+        }
+      } catch (e) {
+        console.warn('App settings pull warning:', e);
       }
 
       if (typeof window !== 'undefined') {

@@ -28,6 +28,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { parseISO, format } from 'date-fns';
 import { businessLendingService } from '../services/businessLendingService';
+import { cloudSyncService } from '../services/cloudSyncService';
 import { db } from '../db';
 import type { BusinessLoan, MonthlyInterestRecord, PrincipalRepayment, CustomColumn } from '../types';
 import {
@@ -413,6 +414,7 @@ export default function BusinessLending() {
         [columnId]: value,
       },
     }));
+    cloudSyncService.scheduleAutoSync();
   };
 
   // Status Indicator (Live Evaluated against current date)
@@ -698,7 +700,7 @@ export default function BusinessLending() {
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="text-base font-bold text-zinc-950 dark:text-zinc-50 font-mono-num">
-                              {formatCurrency(rec.principal)}
+                              {formatCurrency(loan ? loan.principal : rec.principal)}
                             </span>
                             {loan?.isOthersMoney && (
                               <span
@@ -889,7 +891,7 @@ export default function BusinessLending() {
                               return (
                                 <td key={col.id} className="py-3 sm:py-4 px-3 sm:px-6 font-bold text-zinc-950 dark:text-zinc-50 font-mono-num text-sm sm:text-base whitespace-nowrap">
                                   <div className="flex items-center gap-2">
-                                    <span>{formatCurrency(rec.principal)}</span>
+                                    <span>{formatCurrency(loan ? loan.principal : rec.principal)}</span>
                                     {loan?.isOthersMoney && (
                                       <span
                                         className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-900 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800"

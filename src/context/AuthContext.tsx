@@ -82,11 +82,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setHasLocalData(exists);
   }, []);
 
-  // Sync data from cloud
+  // Sync data from cloud (bidirectional: push local changes, then pull updates)
   const syncNow = useCallback(async () => {
     if (!supabase || !user) return;
     setIsSyncing(true);
     try {
+      // 1. Push any local changes to cloud first
+      await cloudSyncService.pushLocalToCloud(user.id);
+      // 2. Pull latest data from cloud
       const res = await cloudSyncService.pullFromCloud(user.id);
       if (res.success) {
         const now = new Date().toISOString();
@@ -135,7 +138,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(session?.user ?? null);
       setLoading(false);
       if (session?.user) {
-        cloudSyncService.pullFromCloud(session.user.id).catch(console.error);
+        cloudSyncService.hasLocalData().then(async (hasData) => {
+          if (hasData) {
+            await cloudSyncService.pushLocalToCloud(session.user.id).catch(console.error);
+          }
+          await cloudSyncService.pullFromCloud(session.user.id).catch(console.error);
+        });
       }
     }).catch((err) => {
       console.error('Failed to get Supabase session:', err);
@@ -148,7 +156,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(session?.user ?? null);
       setLoading(false);
 
-      if (session?.user) {
+      if (session?.user && _event !== 'TOKEN_REFRESHED') {
+        const hasData = await cloudSyncService.hasLocalData();
+        if (hasData) {
+          await cloudSyncService.pushLocalToCloud(session.user.id).catch(console.error);
+        }
         await cloudSyncService.pullFromCloud(session.user.id);
       } else if (_event === 'SIGNED_OUT') {
         // Completely wipe local database and credentials for security on sign out

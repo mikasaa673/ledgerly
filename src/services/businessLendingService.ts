@@ -7,6 +7,7 @@ import type { BusinessLoan, MonthlyInterestRecord, PrincipalRepayment, Transacti
 import { generateId, nowISO, todayISO, calculateNextDueDate, getCollectionStatus } from '../utils';
 import { parseISO, addMonths, format, startOfMonth, endOfMonth } from 'date-fns';
 import { activityLogService } from './activityLogService';
+import { cloudSyncService } from './cloudSyncService';
 
 export const businessLendingService = {
   // --- Loan CRUD ---
@@ -98,6 +99,8 @@ export const businessLendingService = {
       category: data.isOthersMoney ? "Others' Money" : 'Own Capital',
     });
 
+    cloudSyncService.scheduleAutoSync();
+
     return loan;
   },
 
@@ -136,46 +139,53 @@ export const businessLendingService = {
           ? updates.monthlyInterest
           : loan.monthlyInterest;
 
+      // Determine updated firstDueDate: only update firstDueDate if loan had none,
+      // or if editing the record that corresponds to the loan's very first due month
+      let updatedFirstDueDate = loan.firstDueDate;
+      if (updates.dueDate) {
+        if (!loan.firstDueDate) {
+          updatedFirstDueDate = updates.dueDate;
+        } else if (recordId) {
+          const firstDue = parseISO(loan.firstDueDate);
+          const firstMonth = firstDue.getMonth() + 1;
+          const firstYear = firstDue.getFullYear();
+          const targetRec = await db.monthlyInterestRecords.get(recordId);
+          if (targetRec && targetRec.month === firstMonth && targetRec.year === firstYear) {
+            updatedFirstDueDate = updates.dueDate;
+          }
+        }
+      }
+
       // 2. Update the loan
       await db.businessLoans.update(loanId, {
         principal: newPrincipal,
         principalRemaining: newRemaining,
         monthlyInterest: newMonthlyInterest,
         dateLent: updates.dateLent ?? loan.dateLent,
-        firstDueDate: updates.dueDate ?? loan.firstDueDate,
+        firstDueDate: updatedFirstDueDate,
         notes: updates.notes !== undefined ? updates.notes : loan.notes,
         isOthersMoney: updates.isOthersMoney !== undefined ? updates.isOthersMoney : loan.isOthersMoney,
         othersName: updates.othersName !== undefined ? (updates.othersName.trim() || undefined) : loan.othersName,
         updatedAt: nowISO(),
       });
 
-      // 3. Update ALL monthly interest records for this loan across all months!
-      // This guarantees changes (like ₹5,000 -> ₹500 interest or updated due date) automatically reflect in this month, next month, and future months!
+      // 3. Update monthly interest records for this loan across months
       const allLoanRecords = await db.monthlyInterestRecords
         .where('loanId')
         .equals(loanId)
         .toArray();
 
-      for (const rec of allLoanRecords) {
-        // If already fully collected, don't change collected amount, but keep principal snapshot in sync
-        if (rec.collectedAmount > 0 && rec.collectedAmount >= rec.expectedInterest && newMonthlyInterest > 0) {
-          await db.monthlyInterestRecords.update(rec.id, {
-            principal: newRemaining,
-            updatedAt: nowISO(),
-          });
-          continue;
-        }
+      const firstDue = parseISO(updatedFirstDueDate);
+      const firstDueMonth = firstDue.getMonth() + 1;
+      const firstDueYear = firstDue.getFullYear();
 
+      for (const rec of allLoanRecords) {
         let dueDate = rec.dueDate;
         if (updates.dueDate) {
           if (recordId) {
+            // Update due date only for the specific month record being edited
             if (rec.id === recordId) {
               dueDate = updates.dueDate;
-            } else {
-              const newDueDay = parseISO(updates.dueDate).getDate();
-              const daysInMonth = new Date(rec.year, rec.month, 0).getDate();
-              const clamped = Math.min(newDueDay, daysInMonth);
-              dueDate = format(new Date(rec.year, rec.month - 1, clamped), 'yyyy-MM-dd');
             }
           } else {
             const newDue = parseISO(updates.dueDate);
@@ -192,20 +202,25 @@ export const businessLendingService = {
           }
         }
 
-        const firstDue = parseISO(updates.dueDate || loan.firstDueDate);
-        const firstDueMonth = firstDue.getMonth() + 1;
-        const firstDueYear = firstDue.getFullYear();
         const isBeforeFirstDue = rec.year < firstDueYear || (rec.year === firstDueYear && rec.month < firstDueMonth);
         const expectedInterest = newMonthlyInterest;
         const collectedAmount = rec.collectedAmount;
         const pendingAmount = Math.max(0, expectedInterest - collectedAmount);
         const isFullyRepaid = newMonthlyInterest === 0 && newRemaining <= 0;
-        const status = isBeforeFirstDue && collectedAmount === 0
-          ? 'coming_soon'
-          : getCollectionStatus(dueDate, collectedAmount, expectedInterest, isFullyRepaid);
+
+        let status: MonthlyInterestRecord['status'];
+        if (isBeforeFirstDue && collectedAmount === 0) {
+          status = 'coming_soon';
+        } else if (pendingAmount === 0 && (expectedInterest > 0 || isFullyRepaid)) {
+          status = 'collected';
+        } else if (collectedAmount > 0) {
+          status = 'partial';
+        } else {
+          status = getCollectionStatus(dueDate, 0, expectedInterest, isFullyRepaid);
+        }
 
         await db.monthlyInterestRecords.update(rec.id, {
-          principal: newRemaining,
+          principal: newPrincipal,
           expectedInterest,
           pendingAmount,
           dueDate,
@@ -241,6 +256,8 @@ export const businessLendingService = {
         await this.generateRecordForMonth(updatedLoan, newDueMonth, newDueYear, updates.dueDate);
       }
     }
+
+    cloudSyncService.scheduleAutoSync();
   },
 
   async closeLoan(id: string): Promise<void> {
@@ -292,6 +309,13 @@ export const businessLendingService = {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ledgerly-income-updated'));
     }
+
+    // Immediately clean up from Supabase cloud if connected
+    cloudSyncService.deleteRecordsByField('monthly_interest_records', 'loan_id', id);
+    cloudSyncService.deleteRecordsByField('principal_repayments', 'loan_id', id);
+    cloudSyncService.deleteRecordsByField('transactions', 'related_entity_id', id);
+    cloudSyncService.deleteRecord('business_loans', id);
+    cloudSyncService.scheduleAutoSync();
 
     await activityLogService.log({
       module: 'business_lending',
@@ -374,6 +398,8 @@ export const businessLendingService = {
       flow: 'neutral',
       entityId: record.loanId,
     });
+
+    cloudSyncService.scheduleAutoSync();
   },
 
   // --- Monthly Interest Records ---
@@ -403,21 +429,38 @@ export const businessLendingService = {
       : getCollectionStatus(dueDate, 0, expectedInterest, isFullyRepaid);
 
     if (existing) {
-      if (
-        existing.collectedAmount === 0 &&
-        (existing.status !== currentStatus ||
-          existing.expectedInterest !== expectedInterest ||
-          existing.pendingAmount !== pendingAmount ||
-          existing.dueDate !== dueDate)
-      ) {
-        await db.monthlyInterestRecords.update(existing.id, {
-          expectedInterest,
-          pendingAmount,
-          status: currentStatus,
-          dueDate,
-          updatedAt: nowISO(),
-        });
-        return { ...existing, expectedInterest, pendingAmount, status: currentStatus, dueDate };
+      // PRESERVE user's customized due date!
+      const actualDueDate = existing.dueDate || dueDate;
+      const isBeforeFirstDueExisting = year < firstDueYear || (year === firstDueYear && month < firstDueMonth);
+      const effStatus = isBeforeFirstDueExisting && existing.collectedAmount === 0
+        ? 'coming_soon'
+        : (existing.pendingAmount === 0 && (existing.expectedInterest > 0 || isFullyRepaid)
+          ? 'collected'
+          : (existing.collectedAmount > 0
+            ? 'partial'
+            : getCollectionStatus(actualDueDate, 0, existing.expectedInterest, isFullyRepaid)));
+
+      let needsUpdate = false;
+      const updates: Partial<MonthlyInterestRecord> = {};
+
+      if (existing.principal !== loan.principal) {
+        updates.principal = loan.principal;
+        needsUpdate = true;
+      }
+      if (existing.status !== effStatus) {
+        updates.status = effStatus;
+        needsUpdate = true;
+      }
+      if (existing.collectedAmount === 0 && existing.expectedInterest !== expectedInterest) {
+        updates.expectedInterest = expectedInterest;
+        updates.pendingAmount = expectedInterest;
+        needsUpdate = true;
+      }
+
+      if (needsUpdate) {
+        updates.updatedAt = nowISO();
+        await db.monthlyInterestRecords.update(existing.id, updates);
+        return { ...existing, ...updates };
       }
       return existing;
     }
@@ -427,7 +470,7 @@ export const businessLendingService = {
       loanId: loan.id,
       month,
       year,
-      principal: loan.principalRemaining,
+      principal: loan.principal,
       expectedInterest,
       collectedAmount: 0,
       pendingAmount,
@@ -536,6 +579,8 @@ export const businessLendingService = {
       date: data.collectionDate,
       category: 'Business Interest',
     });
+
+    cloudSyncService.scheduleAutoSync();
   },
 
   // --- Principal Repayment ---
@@ -621,6 +666,8 @@ export const businessLendingService = {
       date: data.date,
       category: 'Principal Repayment',
     });
+
+    cloudSyncService.scheduleAutoSync();
   },
 
   async uncollectEmi(recordId: string): Promise<void> {
@@ -671,6 +718,8 @@ export const businessLendingService = {
         updatedAt: nowISO(),
       });
     });
+
+    cloudSyncService.scheduleAutoSync();
   },
 
   // --- Monthly Carry Forward ---
