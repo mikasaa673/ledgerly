@@ -70,7 +70,11 @@ export const cloudSyncService = {
           created_at: a.createdAt,
           updated_at: a.updatedAt,
         }));
-        await supabase.from('bank_accounts').upsert(rows, { onConflict: 'id,user_id' });
+        const { error } = await supabase.from('bank_accounts').upsert(rows, { onConflict: 'id,user_id' });
+        if (error) {
+          console.error('Failed to sync bank_accounts:', error);
+          throw new Error(`Bank Accounts: ${error.message}`);
+        }
         totalCount += accounts.length;
       }
 
@@ -93,7 +97,11 @@ export const cloudSyncService = {
           created_at: l.createdAt,
           updated_at: l.updatedAt,
         }));
-        await supabase.from('business_loans').upsert(rows, { onConflict: 'id,user_id' });
+        const { error } = await supabase.from('business_loans').upsert(rows, { onConflict: 'id,user_id' });
+        if (error) {
+          console.error('Failed to sync business_loans:', error);
+          throw new Error(`Business Loans: ${error.message}`);
+        }
         totalCount += bLoans.length;
       }
 
@@ -118,7 +126,11 @@ export const cloudSyncService = {
           created_at: r.createdAt,
           updated_at: r.updatedAt,
         }));
-        await supabase.from('monthly_interest_records').upsert(rows, { onConflict: 'id,user_id' });
+        const { error } = await supabase.from('monthly_interest_records').upsert(rows, { onConflict: 'id,user_id' });
+        if (error) {
+          console.error('Failed to sync monthly_interest_records:', error);
+          throw new Error(`Monthly Interest: ${error.message}`);
+        }
         totalCount += interestRecords.length;
       }
 
@@ -135,7 +147,11 @@ export const cloudSyncService = {
           notes: p.notes || null,
           created_at: p.createdAt,
         }));
-        await supabase.from('principal_repayments').upsert(rows, { onConflict: 'id,user_id' });
+        const { error } = await supabase.from('principal_repayments').upsert(rows, { onConflict: 'id,user_id' });
+        if (error) {
+          console.error('Failed to sync principal_repayments:', error);
+          throw new Error(`Principal Repayments: ${error.message}`);
+        }
         totalCount += principalRepayments.length;
       }
 
@@ -157,7 +173,11 @@ export const cloudSyncService = {
           created_at: p.createdAt,
           updated_at: p.updatedAt,
         }));
-        await supabase.from('personal_loans').upsert(rows, { onConflict: 'id,user_id' });
+        const { error } = await supabase.from('personal_loans').upsert(rows, { onConflict: 'id,user_id' });
+        if (error) {
+          console.error('Failed to sync personal_loans:', error);
+          throw new Error(`Personal Loans: ${error.message}`);
+        }
         totalCount += pLoans.length;
       }
 
@@ -174,7 +194,11 @@ export const cloudSyncService = {
           notes: p.notes || null,
           created_at: p.createdAt,
         }));
-        await supabase.from('personal_repayments').upsert(rows, { onConflict: 'id,user_id' });
+        const { error } = await supabase.from('personal_repayments').upsert(rows, { onConflict: 'id,user_id' });
+        if (error) {
+          console.error('Failed to sync personal_repayments:', error);
+          throw new Error(`Personal Repayments: ${error.message}`);
+        }
         totalCount += pRepayments.length;
       }
 
@@ -193,7 +217,11 @@ export const cloudSyncService = {
           created_at: e.createdAt,
           updated_at: e.updatedAt,
         }));
-        await supabase.from('expenses').upsert(rows, { onConflict: 'id,user_id' });
+        const { error } = await supabase.from('expenses').upsert(rows, { onConflict: 'id,user_id' });
+        if (error) {
+          console.error('Failed to sync expenses:', error);
+          throw new Error(`Expenses: ${error.message}`);
+        }
         totalCount += expenses.length;
       }
 
@@ -212,7 +240,11 @@ export const cloudSyncService = {
           created_at: i.createdAt,
           updated_at: i.updatedAt,
         }));
-        await supabase.from('incomes').upsert(rows, { onConflict: 'id,user_id' });
+        const { error } = await supabase.from('incomes').upsert(rows, { onConflict: 'id,user_id' });
+        if (error) {
+          console.error('Failed to sync incomes:', error);
+          throw new Error(`Incomes: ${error.message}`);
+        }
         totalCount += incomes.length;
       }
 
@@ -229,7 +261,11 @@ export const cloudSyncService = {
           notes: t.notes || null,
           created_at: t.createdAt,
         }));
-        await supabase.from('bank_transfers').upsert(rows, { onConflict: 'id,user_id' });
+        const { error } = await supabase.from('bank_transfers').upsert(rows, { onConflict: 'id,user_id' });
+        if (error) {
+          console.error('Failed to sync bank_transfers:', error);
+          throw new Error(`Bank Transfers: ${error.message}`);
+        }
         totalCount += transfers.length;
       }
 
@@ -249,7 +285,11 @@ export const cloudSyncService = {
           related_entity_id: t.relatedEntityId || null,
           created_at: t.createdAt,
         }));
-        await supabase.from('transactions').upsert(rows, { onConflict: 'id,user_id' });
+        const { error } = await supabase.from('transactions').upsert(rows, { onConflict: 'id,user_id' });
+        if (error) {
+          console.error('Failed to sync transactions:', error);
+          throw new Error(`Transactions: ${error.message}`);
+        }
         totalCount += txs.length;
       }
 
@@ -277,7 +317,11 @@ export const cloudSyncService = {
           metadata: l.metadata || null,
           created_at: l.createdAt,
         }));
-        await supabase.from('activity_logs').upsert(rows, { onConflict: 'id,user_id' });
+        const { error } = await supabase.from('activity_logs').upsert(rows, { onConflict: 'id,user_id' });
+        if (error) {
+          console.error('Failed to sync activity_logs:', error);
+          throw new Error(`Activity Logs: ${error.message}`);
+        }
         totalCount += logs.length;
       }
 
