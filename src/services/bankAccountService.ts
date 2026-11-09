@@ -4,7 +4,7 @@
 
 import { db } from '../db';
 import type { BankAccount, Transaction } from '../types';
-import { generateId, nowISO } from '../utils';
+import { generateId, nowISO, todayISO } from '../utils';
 import { activityLogService } from './activityLogService';
 import { cloudSyncService } from './cloudSyncService';
 
@@ -100,6 +100,79 @@ export const bankAccountService = {
 
     cloudSyncService.scheduleAutoSync();
     return newBalance;
+  },
+
+  /**
+   * Update bank account balance with full audit trail in Ledger Log and Transactions
+   * Records where the money came from or went to.
+   */
+  async updateBalanceWithAudit(params: {
+    accountId: string;
+    newBalance: number;
+    sourceOrReason: string;
+    notes?: string;
+    date?: string;
+  }): Promise<{ oldBalance: number; newBalance: number; difference: number }> {
+    const account = await db.bankAccounts.get(params.accountId);
+    if (!account) throw new Error('Account not found');
+
+    const oldBalance = account.openingBalance || 0;
+    const newBalance = Math.round(params.newBalance * 100) / 100;
+    const difference = Math.round((newBalance - oldBalance) * 100) / 100;
+    const effectiveDate = params.date || todayISO();
+
+    // 1. Update account balance
+    await db.bankAccounts.update(params.accountId, {
+      openingBalance: newBalance,
+      updatedAt: nowISO(),
+    });
+
+    // 2. If there is a difference, record transaction and ledger log
+    if (difference !== 0) {
+      const isCredit = difference > 0;
+      const absDiff = Math.abs(difference);
+
+      const tx: Transaction = {
+        id: generateId(),
+        type: isCredit ? 'income' : 'expense',
+        amount: absDiff,
+        date: effectiveDate,
+        bankAccountId: params.accountId,
+        description: `Balance Update: ${params.sourceOrReason}${params.notes ? ` (${params.notes})` : ''}`,
+        category: params.sourceOrReason,
+        createdAt: nowISO(),
+      };
+      await db.transactions.put(tx);
+
+      // 3. Record in Master Ledger / Activity Log
+      await activityLogService.log({
+        module: 'bank_account',
+        actionType: 'account_updated',
+        title: isCredit ? 'Bank Balance Added' : 'Bank Balance Deducted',
+        description: `${account.nickname} (${account.bankName}): ${isCredit ? 'Added +' : 'Deducted −'}₹${absDiff.toLocaleString('en-IN')}. Source / Reason: ${params.sourceOrReason}${params.notes ? ` (${params.notes})` : ''}. Previous: ₹${oldBalance.toLocaleString('en-IN')} → New Balance: ₹${newBalance.toLocaleString('en-IN')}`,
+        amount: absDiff,
+        flow: isCredit ? 'credit' : 'debit',
+        bankAccountId: account.id,
+        bankAccountName: `${account.nickname} (${account.bankName})`,
+        category: params.sourceOrReason,
+        date: effectiveDate,
+        metadata: {
+          previousBalance: oldBalance,
+          newBalance: newBalance,
+          difference: difference,
+          sourceOrReason: params.sourceOrReason,
+          notes: params.notes,
+        },
+      });
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ledgerly-bank-updated', { detail: { bankAccountId: params.accountId, newBalance } }));
+      window.dispatchEvent(new CustomEvent('ledgerly-activity-recorded'));
+    }
+
+    cloudSyncService.scheduleAutoSync();
+    return { oldBalance, newBalance, difference };
   },
 
   async getAllWithBalances(): Promise<(BankAccount & { currentBalance: number })[]> {

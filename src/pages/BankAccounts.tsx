@@ -18,6 +18,7 @@ import {
   RotateCcw,
   Upload,
   AlertTriangle,
+  IndianRupee,
 } from 'lucide-react';
 import {
   PageHeader,
@@ -442,6 +443,214 @@ function TransferModal({ isOpen, onClose, onComplete, accounts }: TransferModalP
 }
 
 // ============================================================
+// Update Account Balance Modal (with Audit Trail)
+// ============================================================
+interface UpdateBalanceModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  account: (BankAccount & { currentBalance: number }) | null;
+  onSuccess: () => Promise<void>;
+}
+
+function UpdateBalanceModal({ isOpen, onClose, account, onSuccess }: UpdateBalanceModalProps) {
+  const [newBalance, setNewBalance] = useState('');
+  const [sourceOrReason, setSourceOrReason] = useState('Cash Deposit');
+  const [customReason, setCustomReason] = useState('');
+  const [notes, setNotes] = useState('');
+  const [date, setDate] = useState(todayISO());
+  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (isOpen && account) {
+      setNewBalance(String(account.currentBalance));
+      setSourceOrReason('Cash Deposit');
+      setCustomReason('');
+      setNotes('');
+      setDate(todayISO());
+      setErrors({});
+    }
+  }, [isOpen, account]);
+
+  if (!account) return null;
+
+  const currentBal = account.currentBalance;
+  const parsedNewBal = parseFloat(newBalance);
+  const isValidNum = !isNaN(parsedNewBal) && parsedNewBal >= 0;
+  const difference = isValidNum ? Math.round((parsedNewBal - currentBal) * 100) / 100 : 0;
+  const isCredit = difference > 0;
+  const isDebit = difference < 0;
+
+  const quickSources = isCredit
+    ? ['Cash Deposit', 'Customer / Client Payment', 'Salary / Income', 'Family / Friend Transfer', 'Investment Return', 'Bank Interest', 'Other Source']
+    : ['ATM / Cash Withdrawal', 'Personal Expense', 'Lending / Given Out', 'Bill / Rent Payment', 'Family / Friend Support', 'Bank Charges', 'Other Reason'];
+
+  const validate = () => {
+    const errs: Record<string, string> = {};
+    if (newBalance.trim() === '' || isNaN(parsedNewBal) || parsedNewBal < 0) {
+      errs.newBalance = 'Enter a valid new balance (0 or higher)';
+    }
+    const finalReason = sourceOrReason.startsWith('Other')
+      ? customReason.trim()
+      : (sourceOrReason || customReason).trim();
+
+    if (!finalReason) {
+      errs.sourceOrReason = 'Please specify where the money came from or went';
+    }
+    if (!date) {
+      errs.date = 'Date is required';
+    }
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validate()) return;
+    setSaving(true);
+    try {
+      const finalReason = sourceOrReason.startsWith('Other')
+        ? (customReason.trim() || 'Manual Balance Adjustment')
+        : (sourceOrReason || customReason).trim();
+
+      await bankAccountService.updateBalanceWithAudit({
+        accountId: account.id,
+        newBalance: parsedNewBal,
+        sourceOrReason: finalReason,
+        notes: notes.trim() || undefined,
+        date,
+      });
+
+      await onSuccess();
+      onClose();
+    } catch (err) {
+      console.error('Failed to update balance:', err);
+      setErrors({ form: 'Failed to update balance' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={`Update Balance — ${account.nickname}`} size="md">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {errors.form && (
+          <div className="p-3 rounded-lg bg-red-500/10 text-red-500 text-xs font-medium">
+            {errors.form}
+          </div>
+        )}
+
+        {/* Current vs New Balance Card */}
+        <div className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/60 space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-zinc-500 dark:text-zinc-400 font-medium">Current Balance:</span>
+            <span className="font-bold text-zinc-950 dark:text-zinc-50 font-mono-num text-sm">
+              {formatCurrency(currentBal)}
+            </span>
+          </div>
+
+          {isValidNum && difference !== 0 && (
+            <div className={`flex items-center justify-between text-xs pt-1.5 border-t border-zinc-200/60 dark:border-zinc-800/60 font-medium ${
+              isCredit ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+            }`}>
+              <span>{isCredit ? 'Money Added (Inflow):' : 'Money Deducted (Outflow):'}</span>
+              <span className="font-bold font-mono-num text-sm">
+                {isCredit ? '+' : '−'}{formatCurrency(Math.abs(difference))}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* New Balance Input */}
+        <Input
+          label="New Balance (₹)"
+          type="number"
+          step="any"
+          min="0"
+          value={newBalance}
+          onChange={(e) => setNewBalance(e.target.value)}
+          error={errors.newBalance}
+          placeholder="e.g. 75000"
+          helpText="Enter the actual current balance in this bank account."
+          required
+        />
+
+        {/* Where the money came from or went */}
+        <div className="space-y-2">
+          <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+            {isCredit
+              ? 'Where did the money come from? (Source)'
+              : isDebit
+              ? 'Where did the money go? (Purpose)'
+              : 'Source / Reason'}
+          </label>
+
+          {/* Quick chips */}
+          <div className="flex flex-wrap gap-1.5">
+            {quickSources.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setSourceOrReason(s)}
+                className={`text-xs px-2.5 py-1 rounded-lg border transition-all cursor-pointer font-medium ${
+                  sourceOrReason === s
+                    ? 'border-zinc-950 bg-zinc-950 text-white dark:border-white dark:bg-white dark:text-zinc-950'
+                    : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700'
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+
+          {/* Custom Reason Input if Other selected */}
+          {sourceOrReason.startsWith('Other') && (
+            <Input
+              label="Specify Source / Reason"
+              placeholder="e.g., Sold old laptop, client cash advance..."
+              value={customReason}
+              onChange={(e) => setCustomReason(e.target.value)}
+              error={errors.sourceOrReason}
+              required
+            />
+          )}
+        </div>
+
+        <Input
+          label="Date of Balance Change"
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          error={errors.date}
+          required
+        />
+
+        <Textarea
+          label="Additional Details / Notes (Recorded in Audit Ledger)"
+          placeholder="e.g., Deposited by Suresh, ATM receipt #1234, client payment..."
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          rows={2}
+        />
+
+        <div className="p-2.5 rounded-lg bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/50 text-[11px] text-blue-800 dark:text-blue-300">
+          This balance change and source details will be permanently recorded in your <strong>Master Ledger Log</strong> and account statement history.
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
+          <Button variant="secondary" type="button" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" loading={saving}>
+            Save &amp; Update Ledger
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// ============================================================
 // Account Statement View
 // ============================================================
 interface StatementViewProps {
@@ -449,9 +658,10 @@ interface StatementViewProps {
   accounts: (BankAccount & { currentBalance: number })[];
   onBack: () => void;
   onResetStatement?: () => void;
+  onUpdateBalance?: () => void;
 }
 
-function StatementView({ account, accounts, onBack, onResetStatement }: StatementViewProps) {
+function StatementView({ account, accounts, onBack, onResetStatement, onUpdateBalance }: StatementViewProps) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -526,16 +736,28 @@ function StatementView({ account, accounts, onBack, onResetStatement }: Statemen
           Back to Accounts
         </button>
 
-        {onResetStatement && (
-          <Button
-            variant="danger"
-            size="sm"
-            icon={<RotateCcw className="w-3.5 h-3.5" />}
-            onClick={onResetStatement}
-          >
-            Reset Statement
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {onUpdateBalance && (
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<IndianRupee className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />}
+              onClick={onUpdateBalance}
+            >
+              Update Balance
+            </Button>
+          )}
+          {onResetStatement && (
+            <Button
+              variant="danger"
+              size="sm"
+              icon={<RotateCcw className="w-3.5 h-3.5" />}
+              onClick={onResetStatement}
+            >
+              Reset Statement
+            </Button>
+          )}
+        </div>
       </div>
 
       <Card className="mb-6">
@@ -626,6 +848,7 @@ export default function BankAccounts() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editAccount, setEditAccount] = useState<(BankAccount & { currentBalance: number }) | null>(null);
   const [deleteAccount, setDeleteAccount] = useState<(BankAccount & { currentBalance: number }) | null>(null);
+  const [updatingBalanceAccount, setUpdatingBalanceAccount] = useState<(BankAccount & { currentBalance: number }) | null>(null);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [statementAccount, setStatementAccount] = useState<(BankAccount & { currentBalance: number }) | null>(null);
   const [resettingStatementAccount, setResettingStatementAccount] = useState<(BankAccount & { currentBalance: number }) | null>(null);
@@ -637,6 +860,7 @@ export default function BankAccounts() {
     const handleReset = () => {
       setStatementAccount(null);
       setResettingStatementAccount(null);
+      setUpdatingBalanceAccount(null);
     };
     window.addEventListener('ledgerly-data-reset', handleReset);
     return () => window.removeEventListener('ledgerly-data-reset', handleReset);
@@ -646,7 +870,12 @@ export default function BankAccounts() {
 
   const handleSave = useCallback(async () => {
     await refreshBankAccounts();
-  }, [refreshBankAccounts]);
+    // If viewing statement for updated account, keep it fresh
+    if (statementAccount) {
+      const updated = bankAccounts.find((a) => a.id === statementAccount.id);
+      if (updated) setStatementAccount(updated);
+    }
+  }, [refreshBankAccounts, statementAccount, bankAccounts]);
 
   const handleDelete = useCallback(async () => {
     if (!deleteAccount) return;
@@ -689,6 +918,15 @@ export default function BankAccounts() {
           accounts={bankAccounts}
           onBack={() => setStatementAccount(null)}
           onResetStatement={() => setResettingStatementAccount(statementAccount)}
+          onUpdateBalance={() => setUpdatingBalanceAccount(statementAccount)}
+        />
+
+        {/* Update Balance Modal while in Statement View */}
+        <UpdateBalanceModal
+          isOpen={Boolean(updatingBalanceAccount)}
+          onClose={() => setUpdatingBalanceAccount(null)}
+          account={updatingBalanceAccount}
+          onSuccess={handleSave}
         />
 
         {/* Reset Statement Modal while in Statement View */}
@@ -835,6 +1073,19 @@ export default function BankAccounts() {
                   Statement
                 </Button>
                 <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={<IndianRupee className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setUpdatingBalanceAccount(account);
+                  }}
+                  className="text-xs font-semibold"
+                  title="Update bank balance and record where money came from / went"
+                >
+                  Update Balance
+                </Button>
+                <Button
                   variant="ghost"
                   size="sm"
                   icon={<RotateCcw className="w-3.5 h-3.5" />}
@@ -941,6 +1192,14 @@ export default function BankAccounts() {
         onClose={() => setShowTransferModal(false)}
         onComplete={handleTransferComplete}
         accounts={bankAccounts}
+      />
+
+      {/* Update Balance Modal */}
+      <UpdateBalanceModal
+        isOpen={Boolean(updatingBalanceAccount)}
+        onClose={() => setUpdatingBalanceAccount(null)}
+        account={updatingBalanceAccount}
+        onSuccess={handleSave}
       />
     </div>
   );

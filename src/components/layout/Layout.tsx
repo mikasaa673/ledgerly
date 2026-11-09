@@ -195,17 +195,6 @@ export default function Layout() {
                 </>
               )}
             </button>
-
-            {/* Quick Reset Option Button */}
-            <button
-              type="button"
-              onClick={() => setShowResetConfirm(true)}
-              className="flex items-center gap-1 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-zinc-200 bg-white hover:bg-red-50 hover:border-red-200 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-red-950/40 dark:hover:border-red-900/60 text-zinc-600 dark:text-zinc-400 hover:text-red-600 dark:hover:text-red-400 text-xs font-semibold transition-all shadow-xs cursor-pointer"
-              title="Reset all current values and start fresh"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">Reset Values</span>
-            </button>
           </div>
         </header>
 
