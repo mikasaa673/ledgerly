@@ -17,7 +17,6 @@ import PersonalLending from './pages/PersonalLending';
 import Expenses from './pages/Expenses';
 import IncomePage from './pages/IncomePage';
 import BankAccounts from './pages/BankAccounts';
-import Reports from './pages/Reports';
 import SettingsPage from './pages/SettingsPage';
 import LedgerPage from './pages/LedgerPage';
 
@@ -38,7 +37,7 @@ export default function App() {
                 <Route path="income" element={<IncomePage />} />
                 <Route path="bank-accounts" element={<BankAccounts />} />
                 <Route path="ledger" element={<LedgerPage />} />
-                <Route path="reports" element={<Reports />} />
+                <Route path="reports" element={<Navigate to="/dashboard" replace />} />
                 <Route path="settings" element={<SettingsPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>

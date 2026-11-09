@@ -35,7 +35,6 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
   '/expenses': { title: 'Expenses', subtitle: '' },
   '/income': { title: 'Income', subtitle: '' },
   '/bank-accounts': { title: 'Bank Accounts', subtitle: '' },
-  '/reports': { title: 'Reports', subtitle: '' },
   '/settings': { title: 'Settings', subtitle: '' },
 };
 

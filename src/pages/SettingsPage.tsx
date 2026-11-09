@@ -736,7 +736,7 @@ export default function SettingsPage() {
           Sample / Demo Data
         </h3>
         <p className="text-xs text-[var(--color-text-secondary)]">
-          Quickly populate Ledgerly with sample bank accounts, lending notebooks (matching your notebook examples), personal loans, and categorized expenses to explore all dashboard charts and reports. You can completely remove all sample data at any time without touching your real data.
+          Quickly populate Ledgerly with sample bank accounts, lending notebooks (matching your notebook examples), personal loans, and categorized expenses to explore all dashboard charts and analytics. You can completely remove all sample data at any time without touching your real data.
         </p>
         <div className="flex gap-2 pt-1">
           {!demoLoaded ? (

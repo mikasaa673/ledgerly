@@ -15,7 +15,6 @@ import {
   TrendingUp,
   Landmark,
   BookOpen,
-  BarChart3,
   Settings,
   X,
   IndianRupee,
@@ -33,7 +32,6 @@ const navItems = [
   { to: '/income', icon: TrendingUp, label: 'Income' },
   { to: '/bank-accounts', icon: Landmark, label: 'Bank Accounts' },
   { to: '/ledger', icon: BookOpen, label: 'Ledger Log', badge: 'Audit' },
-  { to: '/reports', icon: BarChart3, label: 'Reports' },
   { to: '/settings', icon: Settings, label: 'Settings & Backups' },
 ];
 
