@@ -6,6 +6,7 @@ import { db } from '../db';
 import type { BankAccount, Transaction } from '../types';
 import { generateId, nowISO } from '../utils';
 import { activityLogService } from './activityLogService';
+import { cloudSyncService } from './cloudSyncService';
 
 export const bankAccountService = {
   async getAll(): Promise<BankAccount[]> {
@@ -82,6 +83,23 @@ export const bankAccountService = {
     if (!account) return 0;
     // Bank account balances are preserved as set by the user and not modified from anywhere for now
     return account.openingBalance;
+  },
+
+  /**
+   * Adjust an account's balance by a positive or negative delta
+   */
+  async adjustBalance(id: string, delta: number): Promise<number | undefined> {
+    const account = await db.bankAccounts.get(id);
+    if (!account) return undefined;
+    const newBalance = Math.round(((account.openingBalance || 0) + delta) * 100) / 100;
+    await db.bankAccounts.update(id, { openingBalance: newBalance, updatedAt: nowISO() });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ledgerly-bank-updated', { detail: { bankAccountId: id, newBalance } }));
+    }
+
+    cloudSyncService.scheduleAutoSync();
+    return newBalance;
   },
 
   async getAllWithBalances(): Promise<(BankAccount & { currentBalance: number })[]> {

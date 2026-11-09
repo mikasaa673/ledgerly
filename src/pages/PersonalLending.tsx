@@ -2,13 +2,14 @@
 // Ledgerly - Personal Lending Page
 // ============================================================
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   HandCoins, Plus, Pencil, ArrowDownLeft, Eye, Trash2, Users, User,
   ChevronDown, ChevronUp, Calendar, Banknote, StickyNote, RotateCcw,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { personalLendingService } from '../services/personalLendingService';
+import { bankAccountService } from '../services/bankAccountService';
 import type { PersonalLoan, PersonalRepayment } from '../types';
 import { formatCurrency, formatDate, todayISO, getDaysSince } from '../utils';
 import {
@@ -416,7 +417,7 @@ function AddLoanModal({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  bankAccounts: { id: string; bankName: string; nickname: string }[];
+  bankAccounts: any[];
   onSuccess: () => Promise<void>;
 }) {
   const [personName, setPersonName] = useState('');
@@ -424,9 +425,15 @@ function AddLoanModal({
   const [dateLent, setDateLent] = useState(todayISO());
   const [expectedRepaymentDate, setExpectedRepaymentDate] = useState('');
   const [bankAccountId, setBankAccountId] = useState('');
+  const [updateBankBalance, setUpdateBankBalance] = useState(true);
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const selectedAccount = useMemo(
+    () => bankAccounts.find((a) => a.id === bankAccountId),
+    [bankAccounts, bankAccountId]
+  );
 
   const resetForm = () => {
     setPersonName('');
@@ -434,6 +441,7 @@ function AddLoanModal({
     setDateLent(todayISO());
     setExpectedRepaymentDate('');
     setBankAccountId('');
+    setUpdateBankBalance(true);
     setNotes('');
     setErrors({});
   };
@@ -452,14 +460,21 @@ function AddLoanModal({
     if (!validate()) return;
     setSaving(true);
     try {
+      const amt = parseFloat(amount);
       await personalLendingService.create({
         personName: personName.trim(),
-        amountLent: parseFloat(amount),
+        amountLent: amt,
         dateLent: dateLent || undefined,
         expectedRepaymentDate: expectedRepaymentDate || undefined,
         bankAccountId: bankAccountId || undefined,
         notes: notes.trim() || undefined,
       });
+
+      // If user opted to update bank balance, deduct from the selected bank account
+      if (updateBankBalance && bankAccountId && amt > 0) {
+        await bankAccountService.adjustBalance(bankAccountId, -amt);
+      }
+
       await onSuccess();
       resetForm();
       onClose();
@@ -483,9 +498,37 @@ function AddLoanModal({
           onChange={e => setBankAccountId(e.target.value)}
           options={[
             { value: '', label: 'None / Cash (No bank account)' },
-            ...bankAccounts.map(a => ({ value: a.id, label: a.nickname || a.bankName })),
+            ...bankAccounts.map(a => ({
+              value: a.id,
+              label: `${a.nickname || a.bankName} (Bal: ${formatCurrency(a.currentBalance ?? a.openingBalance ?? 0)})`,
+            })),
           ]}
         />
+
+        {/* Ask to update bank balance */}
+        {selectedAccount && (
+          <div className="p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/60 space-y-1.5">
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={updateBankBalance}
+                onChange={(e) => setUpdateBankBalance(e.target.checked)}
+                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+              />
+              <div>
+                <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 block">
+                  Update bank balance?
+                </span>
+                <span className="text-[11px] text-zinc-500 dark:text-zinc-400 block -mt-0.5">
+                  {updateBankBalance
+                    ? `Will deduct −${formatCurrency(parseFloat(amount) || 0)} from ${selectedAccount.nickname || selectedAccount.bankName} (New balance: ${formatCurrency((selectedAccount.currentBalance ?? selectedAccount.openingBalance ?? 0) - (parseFloat(amount) || 0))})`
+                    : 'Bank balance will remain untouched'}
+                </span>
+              </div>
+            </label>
+          </div>
+        )}
+
         <Textarea label="Notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any notes..." />
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="secondary" type="button" onClick={() => { resetForm(); onClose(); }}>Cancel</Button>
@@ -635,19 +678,26 @@ function RecordRepaymentModal({
   isOpen: boolean;
   onClose: () => void;
   loan: PersonalLoan;
-  bankAccounts: { id: string; bankName: string; nickname: string }[];
+  bankAccounts: any[];
   onSuccess: () => Promise<void>;
 }) {
   const [amount, setAmount] = useState('');
   const [bankAccountId, setBankAccountId] = useState('');
+  const [updateBankBalance, setUpdateBankBalance] = useState(true);
   const [date, setDate] = useState(todayISO());
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const selectedAccount = useMemo(
+    () => bankAccounts.find((a) => a.id === bankAccountId),
+    [bankAccounts, bankAccountId]
+  );
+
   const resetForm = () => {
     setAmount('');
     setBankAccountId('');
+    setUpdateBankBalance(true);
     setDate(todayISO());
     setNotes('');
     setErrors({});
@@ -668,13 +718,20 @@ function RecordRepaymentModal({
     if (!validate()) return;
     setSaving(true);
     try {
+      const amt = parseFloat(amount);
       await personalLendingService.recordRepayment({
         personalLoanId: loan.id,
-        amount: parseFloat(amount),
+        amount: amt,
         bankAccountId: bankAccountId || undefined,
         date,
         notes: notes.trim() || undefined,
       });
+
+      // If user opted to update bank balance, credit the receiving bank account
+      if (updateBankBalance && bankAccountId && amt > 0) {
+        await bankAccountService.adjustBalance(bankAccountId, amt);
+      }
+
       await onSuccess();
       resetForm();
       onClose();
@@ -707,9 +764,37 @@ function RecordRepaymentModal({
           onChange={e => setBankAccountId(e.target.value)}
           options={[
             { value: '', label: 'None / Cash (No bank account)' },
-            ...bankAccounts.map(a => ({ value: a.id, label: a.nickname || a.bankName })),
+            ...bankAccounts.map(a => ({
+              value: a.id,
+              label: `${a.nickname || a.bankName} (Bal: ${formatCurrency(a.currentBalance ?? a.openingBalance ?? 0)})`,
+            })),
           ]}
         />
+
+        {/* Ask to update bank balance */}
+        {selectedAccount && (
+          <div className="p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/60 space-y-1.5">
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={updateBankBalance}
+                onChange={(e) => setUpdateBankBalance(e.target.checked)}
+                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+              />
+              <div>
+                <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 block">
+                  Update bank balance?
+                </span>
+                <span className="text-[11px] text-zinc-500 dark:text-zinc-400 block -mt-0.5">
+                  {updateBankBalance
+                    ? `Will credit +${formatCurrency(parseFloat(amount) || 0)} into ${selectedAccount.nickname || selectedAccount.bankName} (New balance: ${formatCurrency((selectedAccount.currentBalance ?? selectedAccount.openingBalance ?? 0) + (parseFloat(amount) || 0))})`
+                    : 'Bank balance will remain untouched'}
+                </span>
+              </div>
+            </label>
+          </div>
+        )}
+
         <Input label="Date" type="date" value={date} onChange={e => setDate(e.target.value)} error={errors.date} />
         <Textarea label="Notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any notes..." />
         <div className="flex justify-end gap-2 pt-2">

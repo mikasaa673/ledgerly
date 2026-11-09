@@ -24,6 +24,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { incomeService } from '../services/incomeService';
 import { businessLendingService } from '../services/businessLendingService';
+import { bankAccountService } from '../services/bankAccountService';
 import type { Income } from '../types';
 import {
   formatCurrency,
@@ -574,6 +575,7 @@ function IncomeFormModal({
   const [amount, setAmount] = useState('');
   const [source, setSource] = useState('');
   const [bankAccountId, setBankAccountId] = useState('');
+  const [updateBankBalance, setUpdateBankBalance] = useState(true);
   const [date, setDate] = useState(todayISO());
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
@@ -587,16 +589,23 @@ function IncomeFormModal({
         setBankAccountId(income.bankAccountId);
         setDate(income.date);
         setDescription(income.description || '');
+        setUpdateBankBalance(false);
       } else {
         setAmount('');
         setSource(sources[0] || 'Salary');
         setBankAccountId(bankAccounts[0]?.id || '');
         setDate(todayISO());
         setDescription('');
+        setUpdateBankBalance(true);
       }
       setErrors({});
     }
   }, [isOpen, income, bankAccounts, sources]);
+
+  const selectedAccount = useMemo(
+    () => bankAccounts.find((a) => a.id === bankAccountId),
+    [bankAccounts, bankAccountId]
+  );
 
   const validate = () => {
     const errs: Record<string, string> = {};
@@ -631,6 +640,11 @@ function IncomeFormModal({
           date,
           description: description.trim() || undefined,
         });
+
+        // If user opted to update bank balance, credit the selected bank account
+        if (updateBankBalance && bankAccountId && Number(amount) > 0) {
+          await bankAccountService.adjustBalance(bankAccountId, Number(amount));
+        }
       }
       onSuccess();
     } catch (err) {
@@ -693,6 +707,30 @@ function IncomeFormModal({
             required
           />
         </div>
+
+        {/* Ask to update bank balance */}
+        {!income && selectedAccount && (
+          <div className="p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/60 space-y-1.5">
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={updateBankBalance}
+                onChange={(e) => setUpdateBankBalance(e.target.checked)}
+                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+              />
+              <div>
+                <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 block">
+                  Update bank balance?
+                </span>
+                <span className="text-[11px] text-zinc-500 dark:text-zinc-400 block -mt-0.5">
+                  {updateBankBalance
+                    ? `Will credit +${formatCurrency(Number(amount) || 0)} into ${selectedAccount.nickname || selectedAccount.bankName} (New balance: ${formatCurrency((selectedAccount.currentBalance ?? selectedAccount.openingBalance ?? 0) + (Number(amount) || 0))})`
+                    : 'Bank balance will remain untouched'}
+                </span>
+              </div>
+            </label>
+          </div>
+        )}
 
         <Textarea
           label="Description / Notes (Optional)"

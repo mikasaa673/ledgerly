@@ -28,6 +28,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { parseISO, format } from 'date-fns';
 import { businessLendingService } from '../services/businessLendingService';
+import { bankAccountService } from '../services/bankAccountService';
 import { cloudSyncService } from '../services/cloudSyncService';
 import { db } from '../db';
 import type { BusinessLoan, MonthlyInterestRecord, PrincipalRepayment, CustomColumn } from '../types';
@@ -1522,7 +1523,7 @@ export default function BusinessLending() {
 function AddLoanModal({
   isOpen,
   onClose,
-  bankAccounts: _bankAccounts,
+  bankAccounts,
   onSuccess,
 }: {
   isOpen: boolean;
@@ -1535,10 +1536,17 @@ function AddLoanModal({
   const [isZeroInterest, setIsZeroInterest] = useState(false);
   const [isOthersMoney, setIsOthersMoney] = useState(false);
   const [othersName, setOthersName] = useState('');
+  const [bankAccountId, setBankAccountId] = useState('');
+  const [updateBankBalance, setUpdateBankBalance] = useState(true);
   const [firstDueDate, setFirstDueDate] = useState('');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const selectedAccount = useMemo(
+    () => (bankAccounts || []).find((a) => a.id === bankAccountId),
+    [bankAccounts, bankAccountId]
+  );
 
   useEffect(() => {
     if (isOpen) {
@@ -1549,6 +1557,8 @@ function AddLoanModal({
       setIsZeroInterest(false);
       setIsOthersMoney(false);
       setOthersName('');
+      setBankAccountId('');
+      setUpdateBankBalance(true);
       setNotes('');
       setErrors({});
     }
@@ -1575,17 +1585,25 @@ function AddLoanModal({
     if (!validate()) return;
     setSaving(true);
     try {
+      const p = Number(principal);
       const interestVal = isZeroInterest ? 0 : Number(monthlyInterest);
       const effectiveDateLent = firstDueDate < todayISO() ? firstDueDate : todayISO();
       await businessLendingService.createLoan({
-        principal: Number(principal),
+        principal: p,
         dateLent: effectiveDateLent,
         monthlyInterest: interestVal,
         firstDueDate,
+        bankAccountId: bankAccountId || undefined,
         isOthersMoney,
         othersName: isOthersMoney ? othersName.trim() : undefined,
         notes: notes.trim() || undefined,
       });
+
+      // If user opted to update bank balance, deduct from the selected bank account
+      if (updateBankBalance && bankAccountId && p > 0) {
+        await bankAccountService.adjustBalance(bankAccountId, -p);
+      }
+
       onSuccess();
     } catch (err) {
       console.error(err);
@@ -1656,6 +1674,46 @@ function AddLoanModal({
               </span>
             </label>
           </div>
+        </div>
+
+        {/* Bank Account Selection (Optional) */}
+        <div className="space-y-2">
+          <Select
+            label="Lent From Bank Account (Optional)"
+            value={bankAccountId}
+            onChange={(e) => setBankAccountId(e.target.value)}
+            options={[
+              { value: '', label: 'None / Cash (No bank account)' },
+              ...(bankAccounts || []).map((a) => ({
+                value: a.id,
+                label: `${a.nickname || a.bankName} (Bal: ${formatCurrency(a.currentBalance ?? a.openingBalance ?? 0)})`,
+              })),
+            ]}
+          />
+
+          {/* Ask to update bank balance */}
+          {selectedAccount && (
+            <div className="p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/60 space-y-1.5">
+              <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={updateBankBalance}
+                  onChange={(e) => setUpdateBankBalance(e.target.checked)}
+                  className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                />
+                <div>
+                  <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 block">
+                    Update bank balance?
+                  </span>
+                  <span className="text-[11px] text-zinc-500 dark:text-zinc-400 block -mt-0.5">
+                    {updateBankBalance
+                      ? `Will deduct −${formatCurrency(Number(principal) || 0)} from ${selectedAccount.nickname || selectedAccount.bankName} (New balance: ${formatCurrency((selectedAccount.currentBalance ?? selectedAccount.openingBalance ?? 0) - (Number(principal) || 0))})`
+                      : 'Bank balance will remain untouched'}
+                  </span>
+                </div>
+              </label>
+            </div>
+          )}
         </div>
 
         {/* Others Money Option */}
@@ -1958,9 +2016,15 @@ function CollectInterestModal({
 }) {
   const [amount, setAmount] = useState(String(record.pendingAmount || record.expectedInterest));
   const [bankAccountId, setBankAccountId] = useState(record.collectionBankAccountId || bankAccounts[0]?.id || '');
+  const [updateBankBalance, setUpdateBankBalance] = useState(true);
   const [collectionDate, setCollectionDate] = useState(record.collectionDate || todayISO());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  const selectedAccount = useMemo(
+    () => bankAccounts.find((a) => a.id === bankAccountId),
+    [bankAccounts, bankAccountId]
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1981,6 +2045,12 @@ function CollectInterestModal({
         bankAccountId,
         collectionDate,
       });
+
+      // If user opted to update bank balance, credit the receiving bank account
+      if (updateBankBalance && bankAccountId && val > 0) {
+        await bankAccountService.adjustBalance(bankAccountId, val);
+      }
+
       onSuccess();
     } catch (err) {
       console.error(err);
@@ -2031,6 +2101,30 @@ function CollectInterestModal({
           }))}
           required
         />
+
+        {/* Ask to update bank balance */}
+        {selectedAccount && (
+          <div className="p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/60 space-y-1.5">
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={updateBankBalance}
+                onChange={(e) => setUpdateBankBalance(e.target.checked)}
+                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+              />
+              <div>
+                <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 block">
+                  Update bank balance?
+                </span>
+                <span className="text-[11px] text-zinc-500 dark:text-zinc-400 block -mt-0.5">
+                  {updateBankBalance
+                    ? `Will credit +${formatCurrency(Number(amount) || 0)} into ${selectedAccount.nickname || selectedAccount.bankName} (New balance: ${formatCurrency((selectedAccount.currentBalance ?? selectedAccount.openingBalance ?? 0) + (Number(amount) || 0))})`
+                    : 'Bank balance will remain untouched'}
+                </span>
+              </div>
+            </label>
+          </div>
+        )}
 
         <Input
           label="Collection Date"

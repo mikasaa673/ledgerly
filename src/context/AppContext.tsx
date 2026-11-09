@@ -79,8 +79,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const freshSettings = await db.settings.get('app_settings');
       if (freshSettings) setSettings(freshSettings);
     };
+    const handleBankUpdate = () => {
+      refreshBankAccounts();
+    };
+
     window.addEventListener('ledgerly-data-reset', handleReset);
-    return () => window.removeEventListener('ledgerly-data-reset', handleReset);
+    window.addEventListener('ledgerly-bank-updated', handleBankUpdate);
+    window.addEventListener('ledgerly-statement-reset', handleBankUpdate);
+
+    return () => {
+      window.removeEventListener('ledgerly-data-reset', handleReset);
+      window.removeEventListener('ledgerly-bank-updated', handleBankUpdate);
+      window.removeEventListener('ledgerly-statement-reset', handleBankUpdate);
+    };
   }, [refreshBankAccounts]);
 
   const toggleTheme = useCallback(() => {
