@@ -26,7 +26,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { parseISO, format } from 'date-fns';
+import { parseISO, format, addDays } from 'date-fns';
 import { businessLendingService } from '../services/businessLendingService';
 import { bankAccountService } from '../services/bankAccountService';
 import { cloudSyncService } from '../services/cloudSyncService';
@@ -437,7 +437,7 @@ export default function BusinessLending() {
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800">
             <Check className="w-4 h-4 stroke-[2.5]" />
-            {isEmi ? 'Repaid' : 'Collected'}
+            Collected
           </span>
         );
       case 'partial':
@@ -1538,6 +1538,9 @@ function AddLoanModal({
   const [othersName, setOthersName] = useState('');
   const [bankAccountId, setBankAccountId] = useState('');
   const [updateBankBalance, setUpdateBankBalance] = useState(true);
+  const [tenureType, setTenureType] = useState<'month' | 'days'>('month');
+  const [tenureDays, setTenureDays] = useState<number | string>(7);
+  const [dateLent, setDateLent] = useState(todayISO());
   const [firstDueDate, setFirstDueDate] = useState('');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
@@ -1552,6 +1555,9 @@ function AddLoanModal({
     if (isOpen) {
       setPrincipal('');
       const today = todayISO();
+      setDateLent(today);
+      setTenureType('month');
+      setTenureDays(7);
       setFirstDueDate(computeNextMonthDate(today));
       setMonthlyInterest('');
       setIsZeroInterest(false);
@@ -1564,13 +1570,68 @@ function AddLoanModal({
     }
   }, [isOpen]);
 
+  const handleDateLentChange = (newDateLent: string) => {
+    setDateLent(newDateLent);
+    if (tenureType === 'month') {
+      setFirstDueDate(computeNextMonthDate(newDateLent));
+    } else {
+      const days = Number(tenureDays) || 7;
+      try {
+        const next = addDays(parseISO(newDateLent), days);
+        setFirstDueDate(format(next, 'yyyy-MM-dd'));
+      } catch {
+        setFirstDueDate(newDateLent);
+      }
+    }
+  };
+
+  const handleSelectTenureType = (type: 'month' | 'days') => {
+    setTenureType(type);
+    const baseDate = dateLent || todayISO();
+    if (type === 'month') {
+      setFirstDueDate(computeNextMonthDate(baseDate));
+    } else {
+      const days = Number(tenureDays) || 7;
+      try {
+        const next = addDays(parseISO(baseDate), days);
+        setFirstDueDate(format(next, 'yyyy-MM-dd'));
+      } catch {
+        setFirstDueDate(baseDate);
+      }
+    }
+  };
+
+  const handleSelectDays = (days: number) => {
+    setTenureType('days');
+    setTenureDays(days);
+    const baseDate = dateLent || todayISO();
+    try {
+      const next = addDays(parseISO(baseDate), days);
+      setFirstDueDate(format(next, 'yyyy-MM-dd'));
+    } catch {
+      setFirstDueDate(baseDate);
+    }
+  };
+
+  const handleCustomDaysChange = (val: string) => {
+    setTenureDays(val);
+    const days = parseInt(val, 10);
+    if (!isNaN(days) && days > 0) {
+      const baseDate = dateLent || todayISO();
+      try {
+        const next = addDays(parseISO(baseDate), days);
+        setFirstDueDate(format(next, 'yyyy-MM-dd'));
+      } catch {}
+    }
+  };
+
   const validate = () => {
     const errs: Record<string, string> = {};
     const p = Number(principal);
     if (!principal || isNaN(p) || p <= 0) errs.principal = 'Enter valid amount';
     const mi = Number(monthlyInterest);
     if (!isZeroInterest && (monthlyInterest === '' || isNaN(mi) || mi < 0)) {
-      errs.monthlyInterest = 'Enter manual monthly interest (or select 0% EMI)';
+      errs.monthlyInterest = 'Enter interest (or select 0% EMI)';
     }
     if (!firstDueDate) errs.firstDueDate = 'Due date is required';
     if (isOthersMoney && !othersName.trim()) {
@@ -1587,7 +1648,7 @@ function AddLoanModal({
     try {
       const p = Number(principal);
       const interestVal = isZeroInterest ? 0 : Number(monthlyInterest);
-      const effectiveDateLent = firstDueDate < todayISO() ? firstDueDate : todayISO();
+      const effectiveDateLent = dateLent || todayISO();
       await businessLendingService.createLoan({
         principal: p,
         dateLent: effectiveDateLent,
@@ -1596,7 +1657,7 @@ function AddLoanModal({
         bankAccountId: bankAccountId || undefined,
         isOthersMoney,
         othersName: isOthersMoney ? othersName.trim() : undefined,
-        notes: notes.trim() || undefined,
+        notes: notes.trim() || (tenureType === 'days' ? `Lent for ${tenureDays} days` : undefined),
       });
 
       // If user opted to update bank balance, deduct from the selected bank account
@@ -1617,7 +1678,7 @@ function AddLoanModal({
     <Modal isOpen={isOpen} onClose={onClose} title="New Lending Entry" size="md">
       <form onSubmit={handleSubmit} className="space-y-4">
         <p className="text-xs text-zinc-600 dark:text-zinc-400 -mt-1">
-          Record amount, lending date, and monthly interest directly into your register.
+          Record amount, duration (month or few days), and interest directly into your register.
         </p>
 
         {errors.form && (
@@ -1626,7 +1687,93 @@ function AddLoanModal({
           </div>
         )}
 
+        {/* Tenure / Duration Selector: 1 Month vs A Few Days */}
+        <div className="p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/60 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-zinc-500" />
+              Lending Tenure / Duration
+            </span>
+            <div className="inline-flex rounded-lg p-0.5 bg-zinc-200/70 dark:bg-zinc-800">
+              <button
+                type="button"
+                onClick={() => handleSelectTenureType('month')}
+                className={cn(
+                  "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
+                  tenureType === 'month'
+                    ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-xs"
+                    : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900"
+                )}
+              >
+                1 Month
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelectTenureType('days')}
+                className={cn(
+                  "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
+                  tenureType === 'days'
+                    ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-xs"
+                    : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900"
+                )}
+              >
+                A Few Days
+              </button>
+            </div>
+          </div>
+
+          {tenureType === 'days' ? (
+            <div className="space-y-2 pt-1 border-t border-zinc-200/60 dark:border-zinc-800">
+              <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 block">
+                Select duration or type custom number of days:
+              </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {[3, 5, 7, 10, 15, 20, 30].map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => handleSelectDays(d)}
+                    className={cn(
+                      "px-2.5 py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer",
+                      Number(tenureDays) === d
+                        ? "bg-blue-600 text-white border-blue-600 shadow-xs ring-2 ring-blue-500/20"
+                        : "bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                    )}
+                  >
+                    {d} Days
+                  </button>
+                ))}
+                <div className="inline-flex items-center gap-1 ml-1">
+                  <input
+                    type="number"
+                    min="1"
+                    max="365"
+                    placeholder="Custom"
+                    value={tenureDays}
+                    onChange={(e) => handleCustomDaysChange(e.target.value)}
+                    className="w-20 px-2 py-1 text-xs font-semibold rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
+                  />
+                  <span className="text-xs text-zinc-500">days</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+              Standard 1 month lending cycle. Due on {formatDueDate(firstDueDate)}.
+            </p>
+          )}
+        </div>
+
+        {/* Given Date & Amount */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Input
+            label="Lending Date"
+            type="date"
+            value={dateLent}
+            onChange={(e) => handleDateLentChange(e.target.value)}
+            required
+          />
+
           <Input
             label="Amount (₹)"
             type="number"
@@ -1636,44 +1783,57 @@ function AddLoanModal({
             error={errors.principal}
             required
           />
+        </div>
 
-          <div>
-            <Input
-              label="Monthly Interest (₹)"
-              type="number"
-              placeholder={isZeroInterest ? '0' : 'e.g. 1500'}
-              value={isZeroInterest ? '0' : monthlyInterest}
+        {/* Interest & 0% EMI */}
+        <div>
+          <Input
+            label={
+              isZeroInterest
+                ? 'Interest (₹)'
+                : tenureType === 'days'
+                ? `Interest for ${tenureDays} Days (₹)`
+                : 'Monthly Interest (₹)'
+            }
+            type="number"
+            placeholder={isZeroInterest ? '0' : 'e.g. 1500'}
+            value={isZeroInterest ? '0' : monthlyInterest}
+            onChange={(e) => {
+              setMonthlyInterest(e.target.value);
+              if (Number(e.target.value) === 0 && e.target.value !== '') {
+                setIsZeroInterest(true);
+              }
+            }}
+            disabled={isZeroInterest}
+            error={errors.monthlyInterest}
+            helpText={
+              isZeroInterest
+                ? '0% interest EMI'
+                : tenureType === 'days'
+                ? `Total interest charged for ${tenureDays} days`
+                : 'Manual monthly interest (no % calculation)'
+            }
+            required
+          />
+          <label className="flex items-center gap-2 mt-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={isZeroInterest}
               onChange={(e) => {
-                setMonthlyInterest(e.target.value);
-                if (Number(e.target.value) === 0 && e.target.value !== '') {
-                  setIsZeroInterest(true);
+                const checked = e.target.checked;
+                setIsZeroInterest(checked);
+                if (checked) {
+                  setMonthlyInterest('0');
+                } else {
+                  setMonthlyInterest('');
                 }
               }}
-              disabled={isZeroInterest}
-              error={errors.monthlyInterest}
-              helpText={isZeroInterest ? '0% interest EMI' : 'Manual amount (no % calculation)'}
-              required
+              className="w-4 h-4 rounded text-zinc-950 dark:text-zinc-100 border-zinc-300 dark:border-zinc-700 cursor-pointer"
             />
-            <label className="flex items-center gap-2 mt-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={isZeroInterest}
-                onChange={(e) => {
-                  const checked = e.target.checked;
-                  setIsZeroInterest(checked);
-                  if (checked) {
-                    setMonthlyInterest('0');
-                  } else {
-                    setMonthlyInterest('');
-                  }
-                }}
-                className="w-4 h-4 rounded text-zinc-950 dark:text-zinc-100 border-zinc-300 dark:border-zinc-700 cursor-pointer"
-              />
-              <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                0% Interest / No Interest (EMI Amount)
-              </span>
-            </label>
-          </div>
+            <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+              0% Interest / No Interest (EMI Amount)
+            </span>
+          </label>
         </div>
 
         {/* Bank Account Selection (Optional) */}
@@ -1752,11 +1912,11 @@ function AddLoanModal({
         </div>
 
         <CalendarPicker
-          label="Due Date"
+          label={`Due Date (${tenureType === 'days' ? `${tenureDays} Days` : '1 Month'})`}
           value={firstDueDate}
           onChange={(val) => setFirstDueDate(val)}
           error={errors.firstDueDate}
-          helpText="Click any date on the calendar to select"
+          helpText="Click any date on the calendar to fine-tune due date"
         />
 
         <Textarea

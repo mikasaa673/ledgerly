@@ -243,7 +243,16 @@ export const personalLendingService = {
   },
 
   // Aggregations
+  // Active total money currently lent out (updates and decreases when repayments are received)
   async getTotalLent(): Promise<number> {
+    const loans = await db.personalLoans.toArray();
+    return loans
+      .filter((l) => l && l.status !== 'archived' && l.status !== 'closed')
+      .reduce((sum, l) => sum + (Number(l.outstandingBalance ?? (l.amountLent - (l.amountReturned || 0))) || 0), 0);
+  },
+
+  // Lifetime total principal lent out
+  async getLifetimeLent(): Promise<number> {
     const loans = await db.personalLoans.toArray();
     return loans.filter((l) => l && l.status !== 'archived').reduce((sum, l) => sum + (Number(l.amountLent) || 0), 0);
   },
@@ -258,7 +267,7 @@ export const personalLendingService = {
     return loans.reduce((sum, l) => sum + (Number(l.outstandingBalance) || 0), 0);
   },
 
-  async getPersonSummary(): Promise<{ personName: string; totalLent: number; totalReturned: number; outstanding: number }[]> {
+  async getPersonSummary(): Promise<{ personName: string; totalLent: number; totalReturned: number; outstanding: number; lifetimeLent: number }[]> {
     const loans = await db.personalLoans.filter((l) => l && l.status !== 'archived').toArray();
     const summary = new Map<string, { totalLent: number; totalReturned: number }>();
 
@@ -272,8 +281,9 @@ export const personalLendingService = {
 
     return Array.from(summary.entries()).map(([personName, data]) => ({
       personName,
-      totalLent: data.totalLent,
+      totalLent: Math.max(0, data.totalLent - data.totalReturned),
       totalReturned: data.totalReturned,
+      lifetimeLent: data.totalLent,
       outstanding: Math.max(0, data.totalLent - data.totalReturned),
     }));
   },

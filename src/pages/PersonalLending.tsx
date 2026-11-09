@@ -7,11 +7,12 @@ import {
   HandCoins, Plus, Pencil, ArrowDownLeft, Eye, Trash2, Users, User,
   ChevronDown, ChevronUp, Calendar, Banknote, StickyNote, RotateCcw,
 } from 'lucide-react';
+import { parseISO, format, addDays } from 'date-fns';
 import { useApp } from '../context/AppContext';
 import { personalLendingService } from '../services/personalLendingService';
 import { bankAccountService } from '../services/bankAccountService';
 import type { PersonalLoan, PersonalRepayment } from '../types';
-import { formatCurrency, formatDate, todayISO, getDaysSince } from '../utils';
+import { formatCurrency, formatDate, todayISO, getDaysSince, computeNextMonthDate } from '../utils';
 import {
   Card, StatCard, Button, Input, Select, Textarea, Modal,
   ConfirmDialog, Badge, EmptyState, LoadingSpinner, PageHeader,
@@ -23,6 +24,7 @@ interface PersonSummary {
   totalLent: number;
   totalReturned: number;
   outstanding: number;
+  lifetimeLent?: number;
 }
 
 // ============================================================
@@ -35,7 +37,7 @@ export default function PersonalLending() {
   const [personSummaries, setPersonSummaries] = useState<PersonSummary[]>([]);
   const [totalLent, setTotalLent] = useState(0);
   const [totalReturned, setTotalReturned] = useState(0);
-  const [totalOutstanding, setTotalOutstanding] = useState(0);
+  const [lifetimeLent, setLifetimeLent] = useState(0);
   const [loading, setLoading] = useState(true);
 
   // Modal states
@@ -56,20 +58,20 @@ export default function PersonalLending() {
 
   const loadData = useCallback(async () => {
     try {
-      const [allLoans, summaries, lent, returned, outstanding] = await Promise.all([
+      const [allLoans, summaries, activeLent, returned, lifetime] = await Promise.all([
         personalLendingService.getAll(),
         personalLendingService.getPersonSummary(),
         personalLendingService.getTotalLent(),
         personalLendingService.getTotalReturned(),
-        personalLendingService.getTotalOutstanding(),
+        personalLendingService.getLifetimeLent(),
       ]);
       const validLoans = (allLoans || []).filter((l) => l && l.status !== 'archived');
       validLoans.sort((a, b) => (b.dateLent || b.createdAt || '').localeCompare(a.dateLent || a.createdAt || ''));
       setLoans(validLoans);
       setPersonSummaries(summaries || []);
-      setTotalLent(lent || 0);
+      setTotalLent(activeLent || 0);
       setTotalReturned(returned || 0);
-      setTotalOutstanding(outstanding || 0);
+      setLifetimeLent(lifetime || 0);
     } catch (err) {
       console.error('Failed to load personal lending data:', err);
     } finally {
@@ -154,9 +156,21 @@ export default function PersonalLending() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard label="Total Money Lent" value={formatCurrency(totalLent)} subtitle="Lifetime interest-free" />
-        <StatCard label="Total Returned" value={formatCurrency(totalReturned)} subtitle="Repaid by friends/family" />
-        <StatCard label="Total Outstanding" value={formatCurrency(totalOutstanding)} subtitle="Current active balance" />
+        <StatCard
+          label="Total Money Lent"
+          value={formatCurrency(totalLent)}
+          subtitle={totalReturned > 0 ? `${formatCurrency(lifetimeLent)} original (${formatCurrency(totalReturned)} returned)` : 'Current active lent out'}
+        />
+        <StatCard
+          label="Total Returned"
+          value={formatCurrency(totalReturned)}
+          subtitle="Repaid by friends/family"
+        />
+        <StatCard
+          label="Lifetime Lent"
+          value={formatCurrency(lifetimeLent)}
+          subtitle="Total historical capital lent"
+        />
       </div>
 
       {/* Person Summaries */}
@@ -181,7 +195,7 @@ export default function PersonalLending() {
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="text-right">
-                      <p className="text-[10px] text-zinc-500 font-medium">Outstanding</p>
+                      <p className="text-[10px] text-zinc-500 font-medium">Currently Lent</p>
                       <p className="text-sm font-bold font-mono-num text-zinc-950">
                         {formatCurrency(ps.outstanding)}
                       </p>
@@ -192,16 +206,16 @@ export default function PersonalLending() {
                 {expandedPerson === ps.personName && (
                   <div className="px-4 pb-3 grid grid-cols-3 gap-3 border-t border-zinc-200/60 bg-white">
                     <div className="pt-3">
-                      <p className="text-[10px] text-zinc-500 font-medium">Total Lent</p>
-                      <p className="text-sm font-bold font-mono-num text-zinc-900">{formatCurrency(ps.totalLent)}</p>
+                      <p className="text-[10px] text-zinc-500 font-medium">Currently Lent</p>
+                      <p className="text-sm font-bold font-mono-num text-zinc-900">{formatCurrency(ps.outstanding)}</p>
                     </div>
                     <div className="pt-3">
                       <p className="text-[10px] text-zinc-500 font-medium">Total Returned</p>
                       <p className="text-sm font-bold font-mono-num text-zinc-900">{formatCurrency(ps.totalReturned)}</p>
                     </div>
                     <div className="pt-3">
-                      <p className="text-[10px] text-zinc-500 font-medium">Outstanding</p>
-                      <p className="text-sm font-bold font-mono-num text-zinc-950">{formatCurrency(ps.outstanding)}</p>
+                      <p className="text-[10px] text-zinc-500 font-medium">Original Lent</p>
+                      <p className="text-sm font-bold font-mono-num text-zinc-950">{formatCurrency(ps.lifetimeLent || ps.totalLent)}</p>
                     </div>
                   </div>
                 )}
@@ -269,7 +283,7 @@ export default function PersonalLending() {
                     <td className="py-3 px-3">
                       <div className="flex items-center gap-1">
                         {loan.status === 'active' && (
-                          <Button variant="ghost" size="sm" icon={<ArrowDownLeft className="w-3.5 h-3.5" />} onClick={() => handleRecordRepayment(loan)} title="Record Repayment" />
+                          <Button variant="ghost" size="sm" icon={<ArrowDownLeft className="w-3.5 h-3.5" />} onClick={() => handleRecordRepayment(loan)} title="Collect Repayment" />
                         )}
                         <Button variant="ghost" size="sm" icon={<Pencil className="w-3.5 h-3.5" />} onClick={() => handleEditClick(loan)} title="Edit Loan" />
                         <Button variant="ghost" size="sm" icon={<Eye className="w-3.5 h-3.5" />} onClick={() => handleViewDetail(loan)} title="View Details" />
@@ -329,7 +343,7 @@ export default function PersonalLending() {
                 </p>
                 <div className="flex items-center gap-2 border-t pt-3" style={{ borderColor: 'var(--color-border)' }}>
                   {loan.status === 'active' && (
-                    <Button variant="secondary" size="sm" icon={<ArrowDownLeft className="w-3.5 h-3.5" />} onClick={() => handleRecordRepayment(loan)}>Repayment</Button>
+                    <Button variant="secondary" size="sm" icon={<ArrowDownLeft className="w-3.5 h-3.5" />} onClick={() => handleRecordRepayment(loan)}>Collect</Button>
                   )}
                   <Button variant="ghost" size="sm" icon={<Pencil className="w-3.5 h-3.5" />} onClick={() => handleEditClick(loan)}>Edit</Button>
                   <Button variant="ghost" size="sm" icon={<Eye className="w-3.5 h-3.5" />} onClick={() => handleViewDetail(loan)}>Details</Button>
@@ -493,7 +507,37 @@ function AddLoanModal({
         <Input label="Person's Name" value={personName} onChange={e => setPersonName(e.target.value)} error={errors.personName} placeholder="e.g., Rahul" required />
         <Input label="Amount (₹)" type="number" min="0" step="any" value={amount} onChange={e => setAmount(e.target.value)} error={errors.amount} placeholder="₹ Amount" required />
         <Input label="Given Date (optional)" type="date" value={dateLent} onChange={e => setDateLent(e.target.value)} />
-        <Input label="Expected Repayment Date (optional)" type="date" value={expectedRepaymentDate} onChange={e => setExpectedRepaymentDate(e.target.value)} />
+        <div className="space-y-1.5">
+          <Input label="Expected Repayment Date (optional)" type="date" value={expectedRepaymentDate} onChange={e => setExpectedRepaymentDate(e.target.value)} />
+          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+            <span className="text-[11px] text-zinc-500 font-medium">Quick Tenure:</span>
+            {[3, 5, 7, 10, 15, 20].map(days => (
+              <button
+                key={days}
+                type="button"
+                onClick={() => {
+                  const base = dateLent || todayISO();
+                  try {
+                    setExpectedRepaymentDate(format(addDays(parseISO(base), days), 'yyyy-MM-dd'));
+                  } catch {}
+                }}
+                className="px-2 py-0.5 text-[11px] font-semibold rounded-md border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 cursor-pointer"
+              >
+                +{days} Days
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => {
+                const base = dateLent || todayISO();
+                setExpectedRepaymentDate(computeNextMonthDate(base));
+              }}
+              className="px-2 py-0.5 text-[11px] font-semibold rounded-md border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 cursor-pointer"
+            >
+              +1 Month
+            </button>
+          </div>
+        </div>
         <Select
           label="Bank Account (optional)"
           value={bankAccountId}
@@ -745,7 +789,7 @@ function RecordRepaymentModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={() => { resetForm(); onClose(); }} title={`Record Repayment — ${loan.personName}`}>
+    <Modal isOpen={isOpen} onClose={() => { resetForm(); onClose(); }} title={`Collect Repayment — ${loan.personName}`}>
       <div className="mb-4 p-3 rounded-lg" style={{ backgroundColor: 'var(--color-bg-tertiary)' }}>
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div>
@@ -759,7 +803,7 @@ function RecordRepaymentModal({
         </div>
       </div>
       <form onSubmit={handleSubmit} className="space-y-4">
-        <Input label="Repayment Amount" type="number" min="0" step="any" value={amount} onChange={e => setAmount(e.target.value)} error={errors.amount} placeholder="₹ Amount" />
+        <Input label="Collection Amount (₹)" type="number" min="0" step="any" value={amount} onChange={e => setAmount(e.target.value)} error={errors.amount} placeholder="₹ Amount" />
         <Select
           label="Receiving Bank Account (optional)"
           value={bankAccountId}
