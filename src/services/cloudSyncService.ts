@@ -527,8 +527,7 @@ export const cloudSyncService = {
         const localPLoans: PersonalLoan[] = [];
 
         for (const p of pLoans) {
-          const isZombie = p.person_name && p.person_name.toLowerCase().includes('tamata');
-          if (deletedIds.has(p.id) || isZombie) {
+          if (deletedIds.has(p.id)) {
             idsToPurge.push(p.id);
             continue;
           }
@@ -632,12 +631,10 @@ export const cloudSyncService = {
         const localTxs: Transaction[] = [];
 
         for (const t of txs) {
-          const isZombie = t.description && t.description.toLowerCase().includes('tamata');
           if (
             deletedIds.has(t.id) ||
             deletedIds.has(`log_legacy_${t.id}`) ||
-            (t.related_entity_id && deletedIds.has(t.related_entity_id)) ||
-            isZombie
+            (t.related_entity_id && deletedIds.has(t.related_entity_id))
           ) {
             idsToPurge.push(t.id);
             continue;
@@ -672,17 +669,11 @@ export const cloudSyncService = {
         const localLogs: ActivityLog[] = [];
 
         for (const l of logs) {
-          const isZombie =
-            (l.description && l.description.toLowerCase().includes('tamata')) ||
-            (l.person_name && l.person_name.toLowerCase().includes('tamata')) ||
-            (l.title && l.title.toLowerCase().includes('tamata'));
-
           if (
             deletedIds.has(l.id) ||
             (l.entity_id && deletedIds.has(l.entity_id)) ||
             deletedIds.has(`log_legacy_${l.id}`) ||
-            (l.entity_id && deletedIds.has(`log_legacy_${l.entity_id}`)) ||
-            isZombie
+            (l.entity_id && deletedIds.has(`log_legacy_${l.entity_id}`))
           ) {
             idsToPurge.push(l.id);
             continue;

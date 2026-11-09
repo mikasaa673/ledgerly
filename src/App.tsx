@@ -3,13 +3,12 @@
 // Landing Page: Business Lending Register (User's Core Business)
 // ============================================================
 
-import React, { useEffect } from 'react';
+import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
 import AuthGuard from './components/auth/AuthGuard';
 import Layout from './components/layout/Layout';
-import { purgeTamataZombieEntry } from './services/activityLogService';
 
 // Pages
 import BusinessLending from './pages/BusinessLending';
@@ -23,11 +22,6 @@ import SettingsPage from './pages/SettingsPage';
 import LedgerPage from './pages/LedgerPage';
 
 export default function App() {
-  useEffect(() => {
-    // Purge any lingering zombie entries on startup across Dexie & Supabase
-    purgeTamataZombieEntry();
-  }, []);
-
   return (
     <AuthProvider>
       <AppProvider>
