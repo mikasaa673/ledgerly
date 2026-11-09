@@ -1404,6 +1404,7 @@ export default function BusinessLending() {
             setSelectedRecord(null);
           }}
           record={selectedRecord}
+          loan={loanMap.get(selectedRecord.loanId)}
           bankAccounts={bankAccounts}
           onSuccess={() => {
             setShowCollectModal(false);
@@ -2191,12 +2192,14 @@ function CollectInterestModal({
   isOpen,
   onClose,
   record,
+  loan,
   bankAccounts,
   onSuccess,
 }: {
   isOpen: boolean;
   onClose: () => void;
   record: MonthlyInterestRecord;
+  loan?: BusinessLoan;
   bankAccounts: any[];
   onSuccess: () => void;
 }) {
@@ -2204,6 +2207,13 @@ function CollectInterestModal({
   const [bankAccountId, setBankAccountId] = useState(record.collectionBankAccountId || bankAccounts[0]?.id || '');
   const [updateBankBalance, setUpdateBankBalance] = useState(true);
   const [collectionDate, setCollectionDate] = useState(record.collectionDate || todayISO());
+
+  // Principal return state
+  const remainingPrincipal = loan?.principalRemaining || 0;
+  const [isReturningPrincipal, setIsReturningPrincipal] = useState(false);
+  const [principalAmount, setPrincipalAmount] = useState(String(remainingPrincipal));
+  const [clearLoanPermanently, setClearLoanPermanently] = useState(true);
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -2212,11 +2222,15 @@ function CollectInterestModal({
     [bankAccounts, bankAccountId]
   );
 
+  const interestVal = Number(amount) || 0;
+  const principalVal = isReturningPrincipal ? (Number(principalAmount) || 0) : 0;
+  const totalAmountReceived = interestVal + principalVal;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const val = Number(amount);
     if (!amount || isNaN(val) || val <= 0) {
-      setError('Enter valid collection amount');
+      setError('Enter valid interest collection amount');
       return;
     }
     if (!bankAccountId) {
@@ -2224,17 +2238,43 @@ function CollectInterestModal({
       return;
     }
 
+    const pVal = isReturningPrincipal ? Number(principalAmount) : 0;
+    if (isReturningPrincipal) {
+      if (isNaN(pVal) || pVal <= 0) {
+        setError('Enter valid principal return amount');
+        return;
+      }
+      if (pVal > remainingPrincipal) {
+        setError(`Principal returned cannot exceed remaining balance (${formatCurrency(remainingPrincipal)})`);
+        return;
+      }
+    }
+
     setSaving(true);
     try {
+      // 1. Record interest collection
       await businessLendingService.collectInterest(record.id, {
         amount: val,
         bankAccountId,
         collectionDate,
       });
 
-      // If user opted to update bank balance, credit the receiving bank account
-      if (updateBankBalance && bankAccountId && val > 0) {
-        await bankAccountService.adjustBalance(bankAccountId, val);
+      // 2. If principal returned as well, record principal repayment
+      if (isReturningPrincipal && loan && pVal > 0) {
+        await businessLendingService.recordPrincipalRepayment({
+          loanId: loan.id,
+          amount: pVal,
+          bankAccountId,
+          date: collectionDate,
+          notes: (clearLoanPermanently || pVal >= remainingPrincipal)
+            ? 'Full principal settlement (Loan cleared permanently)'
+            : 'Principal repayment received with monthly interest',
+        });
+      }
+
+      // 3. If user opted to update bank balance, credit total money received
+      if (updateBankBalance && bankAccountId && totalAmountReceived > 0) {
+        await bankAccountService.adjustBalance(bankAccountId, totalAmountReceived);
       }
 
       onSuccess();
@@ -2249,33 +2289,131 @@ function CollectInterestModal({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Record Interest Collection" size="sm">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="p-3.5 rounded-lg bg-zinc-50 border border-zinc-200/80 text-xs space-y-1.5">
+        <div className="p-3.5 rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 text-xs space-y-1.5">
           <div className="flex justify-between">
-            <span className="text-zinc-600 font-medium">Expected Interest:</span>
-            <span className="font-bold text-zinc-950 font-mono-num">{formatCurrency(record.expectedInterest)}</span>
+            <span className="text-zinc-600 dark:text-zinc-400 font-medium">Expected Interest:</span>
+            <span className="font-bold text-zinc-950 dark:text-zinc-50 font-mono-num">{formatCurrency(record.expectedInterest)}</span>
           </div>
           {record.collectedAmount > 0 && (
             <div className="flex justify-between">
-              <span className="text-zinc-600 font-medium">Already Collected:</span>
-              <span className="font-semibold text-emerald-700 font-mono-num">{formatCurrency(record.collectedAmount)}</span>
+              <span className="text-zinc-600 dark:text-zinc-400 font-medium">Already Collected:</span>
+              <span className="font-semibold text-emerald-700 dark:text-emerald-400 font-mono-num">{formatCurrency(record.collectedAmount)}</span>
             </div>
           )}
-          <div className="flex justify-between border-t border-zinc-200/60 pt-1.5">
-            <span className="text-zinc-700 font-semibold">Remaining Pending:</span>
-            <span className="font-bold text-zinc-900 font-mono-num">{formatCurrency(record.pendingAmount)}</span>
+          <div className="flex justify-between border-t border-zinc-200/60 dark:border-zinc-800 pt-1.5">
+            <span className="text-zinc-700 dark:text-zinc-300 font-semibold">Remaining Pending:</span>
+            <span className="font-bold text-zinc-900 dark:text-zinc-100 font-mono-num">{formatCurrency(record.pendingAmount)}</span>
           </div>
         </div>
 
         {error && <p className="text-xs text-red-600 font-medium">{error}</p>}
 
         <Input
-          label="Actual Amount Received (₹)"
+          label="Interest Amount Received (₹)"
           type="number"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           helpText="Defaults to pending interest. Partial collection keeps the rest as pending."
           required
         />
+
+        {/* Option to also collect Principal and permanently clear the loan */}
+        {loan && remainingPrincipal > 0 && (
+          <div className="p-3.5 rounded-xl border border-amber-200 dark:border-amber-800/80 bg-amber-50/50 dark:bg-amber-950/20 space-y-3">
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={isReturningPrincipal}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setIsReturningPrincipal(checked);
+                  if (checked) {
+                    setPrincipalAmount(String(remainingPrincipal));
+                    setClearLoanPermanently(true);
+                  }
+                }}
+                className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
+              />
+              <div>
+                <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 block">
+                  Principal is also being returned?
+                </span>
+                <span className="text-[11px] text-zinc-500 dark:text-zinc-400 block -mt-0.5">
+                  Borrower is returning principal as well (clear loan permanently)
+                </span>
+              </div>
+            </label>
+
+            {isReturningPrincipal && (
+              <div className="space-y-3 pt-2 border-t border-amber-200/60 dark:border-amber-800/60">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-zinc-600 dark:text-zinc-400 font-medium">Outstanding Principal:</span>
+                  <span className="font-bold font-mono-num text-zinc-900 dark:text-zinc-100">
+                    {formatCurrency(remainingPrincipal)}
+                  </span>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Input
+                    label="Principal Returned (₹)"
+                    type="number"
+                    max={remainingPrincipal}
+                    value={principalAmount}
+                    onChange={(e) => {
+                      setPrincipalAmount(e.target.value);
+                      const p = Number(e.target.value);
+                      if (p >= remainingPrincipal) {
+                        setClearLoanPermanently(true);
+                      } else {
+                        setClearLoanPermanently(false);
+                      }
+                    }}
+                    helpText={
+                      clearLoanPermanently
+                        ? "Full principal settlement — loan will be closed and permanently cleared"
+                        : `Partial return — remaining balance will be ${formatCurrency(Math.max(0, remainingPrincipal - (Number(principalAmount) || 0)))}`
+                    }
+                    required
+                  />
+
+                  <label className="flex items-center gap-2 cursor-pointer select-none pt-0.5">
+                    <input
+                      type="checkbox"
+                      checked={clearLoanPermanently}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setClearLoanPermanently(checked);
+                        if (checked) {
+                          setPrincipalAmount(String(remainingPrincipal));
+                        }
+                      }}
+                      className="w-3.5 h-3.5 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                    />
+                    <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                      Clear loan permanently ({formatCurrency(remainingPrincipal)} full return)
+                    </span>
+                  </label>
+                </div>
+
+                {/* Combined Total Received Breakdown */}
+                <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-amber-200 dark:border-amber-800 text-xs space-y-1">
+                  <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
+                    <span>Interest Collected:</span>
+                    <span className="font-mono-num font-semibold text-zinc-900 dark:text-zinc-100">{formatCurrency(interestVal)}</span>
+                  </div>
+                  <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
+                    <span>Principal Returned:</span>
+                    <span className="font-mono-num font-semibold text-zinc-900 dark:text-zinc-100">{formatCurrency(principalVal)}</span>
+                  </div>
+                  <div className="flex justify-between pt-1 border-t border-zinc-200 dark:border-zinc-800 font-bold text-zinc-950 dark:text-zinc-50">
+                    <span>Total Money Received:</span>
+                    <span className="font-mono-num text-emerald-700 dark:text-emerald-400 text-sm font-extrabold">{formatCurrency(totalAmountReceived)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <Select
           label="Received Into Bank Account"
@@ -2304,7 +2442,7 @@ function CollectInterestModal({
                 </span>
                 <span className="text-[11px] text-zinc-500 dark:text-zinc-400 block -mt-0.5">
                   {updateBankBalance
-                    ? `Will credit +${formatCurrency(Number(amount) || 0)} into ${selectedAccount.nickname || selectedAccount.bankName} (New balance: ${formatCurrency((selectedAccount.currentBalance ?? selectedAccount.openingBalance ?? 0) + (Number(amount) || 0))})`
+                    ? `Will credit +${formatCurrency(totalAmountReceived)} into ${selectedAccount.nickname || selectedAccount.bankName} (New balance: ${formatCurrency((selectedAccount.currentBalance ?? selectedAccount.openingBalance ?? 0) + totalAmountReceived)})`
                     : 'Bank balance will remain untouched'}
                 </span>
               </div>
@@ -2320,7 +2458,7 @@ function CollectInterestModal({
           required
         />
 
-        <div className="flex items-center justify-between gap-2 pt-3 border-t border-zinc-100">
+        <div className="flex items-center justify-between gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
           {record.collectedAmount > 0 ? (
             <Button
               type="button"

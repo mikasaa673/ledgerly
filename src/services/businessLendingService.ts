@@ -629,10 +629,26 @@ export const businessLendingService = {
           });
         }
       } else if (newRemaining <= 0) {
-        // If loan is fully repaid, mark uncollected EMI records as collected
+        // If loan is fully repaid, clean up future monthly records so loan is permanently cleared
         const recs = await db.monthlyInterestRecords.where('loanId').equals(data.loanId).toArray();
+        let repMonth = 12;
+        let repYear = 2099;
+        try {
+          const repDate = parseISO(data.date);
+          if (!isNaN(repDate.getTime())) {
+            repMonth = repDate.getMonth() + 1;
+            repYear = repDate.getFullYear();
+          }
+        } catch {}
+
         for (const r of recs) {
-          if (r.expectedInterest === 0 && r.collectedAmount === 0) {
+          // If in a future month and nothing was collected, delete so loan never appears again
+          if (r.year > repYear || (r.year === repYear && r.month > repMonth)) {
+            if ((r.collectedAmount || 0) === 0) {
+              await db.monthlyInterestRecords.delete(r.id);
+              await cloudSyncService.deleteRecord('monthly_interest_records', r.id);
+            }
+          } else if (r.expectedInterest === 0 && r.collectedAmount === 0) {
             await db.monthlyInterestRecords.update(r.id, {
               status: 'collected',
               updatedAt: nowISO(),
