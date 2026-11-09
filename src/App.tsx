@@ -3,7 +3,7 @@
 // Landing Page: Business Lending Register (User's Core Business)
 // ============================================================
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
@@ -21,6 +21,10 @@ import SettingsPage from './pages/SettingsPage';
 import LedgerPage from './pages/LedgerPage';
 
 export default function App() {
+  useEffect(() => {
+    document.title = 'Ledgerly';
+  }, []);
+
   return (
     <AuthProvider>
       <AppProvider>

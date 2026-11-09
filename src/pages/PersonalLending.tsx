@@ -63,11 +63,13 @@ export default function PersonalLending() {
         personalLendingService.getTotalReturned(),
         personalLendingService.getTotalOutstanding(),
       ]);
-      setLoans(allLoans.filter(l => l.status !== 'archived').sort((a, b) => b.dateLent.localeCompare(a.dateLent)));
-      setPersonSummaries(summaries);
-      setTotalLent(lent);
-      setTotalReturned(returned);
-      setTotalOutstanding(outstanding);
+      const validLoans = (allLoans || []).filter((l) => l && l.status !== 'archived');
+      validLoans.sort((a, b) => (b.dateLent || b.createdAt || '').localeCompare(a.dateLent || a.createdAt || ''));
+      setLoans(validLoans);
+      setPersonSummaries(summaries || []);
+      setTotalLent(lent || 0);
+      setTotalReturned(returned || 0);
+      setTotalOutstanding(outstanding || 0);
     } catch (err) {
       console.error('Failed to load personal lending data:', err);
     } finally {
@@ -824,7 +826,7 @@ function LoanDetailModal({
     if (isOpen && loan) {
       setLoading(true);
       personalLendingService.getRepayments(loan.id).then(r => {
-        setRepayments(r.sort((a, b) => b.date.localeCompare(a.date)));
+        setRepayments((r || []).sort((a, b) => (b.date || b.createdAt || '').localeCompare(a.date || a.createdAt || '')));
         setLoading(false);
       });
     }

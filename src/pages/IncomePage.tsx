@@ -93,7 +93,7 @@ export default function IncomePage() {
         businessLendingService.getInterestPendingForMonth(selectedMonth, selectedYear),
       ]);
 
-      setIncomes(list.sort((a, b) => b.date.localeCompare(a.date)));
+      setIncomes((list || []).sort((a, b) => (b.date || b.createdAt || '').localeCompare(a.date || a.createdAt || '')));
       setTotalIncome(total);
       setInterestIncome(interest);
       setOtherIncome(other);

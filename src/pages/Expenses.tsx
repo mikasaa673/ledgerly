@@ -187,8 +187,8 @@ export default function Expenses() {
         return true;
       })
       .sort((a, b) => {
-        if (sortBy === 'date_desc') return b.date.localeCompare(a.date);
-        if (sortBy === 'date_asc') return a.date.localeCompare(b.date);
+        if (sortBy === 'date_desc') return (b.date || b.createdAt || '').localeCompare(a.date || a.createdAt || '');
+        if (sortBy === 'date_asc') return (a.date || a.createdAt || '').localeCompare(b.date || b.createdAt || '');
         if (sortBy === 'amount_desc') return b.amount - a.amount;
         if (sortBy === 'amount_asc') return a.amount - b.amount;
         return 0;

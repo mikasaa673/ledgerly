@@ -803,7 +803,7 @@ export default function BusinessLending() {
                                 className="!py-1 !px-3 text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800"
                                 onClick={() => loan && openPrincipalRepayment(loan, rec)}
                               >
-                                <Check className="w-3.5 h-3.5 mr-1" /> Repaid
+                                <Check className="w-3.5 h-3.5 mr-1" /> Collected
                               </Button>
                             ) : isDueFutureMonth ? (
                               <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">
@@ -817,7 +817,7 @@ export default function BusinessLending() {
                                 icon={<ArrowDownLeft className="w-3.5 h-3.5" />}
                                 onClick={() => loan && openPrincipalRepayment(loan, rec)}
                               >
-                                Repay EMI
+                                Collect EMI
                               </Button>
                             )
                           ) : isDueFutureMonth ? (
@@ -997,9 +997,9 @@ export default function BusinessLending() {
                                   variant="secondary"
                                   className="!py-1.5 !px-3.5 !text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800"
                                   onClick={() => loan && openPrincipalRepayment(loan, rec)}
-                                  title="EMI Repaid. Click to view or adjust repayment."
+                                  title="EMI Collected. Click to view or adjust collection."
                                 >
-                                  <Check className="w-4 h-4 mr-1 inline" /> Repaid
+                                  <Check className="w-4 h-4 mr-1 inline" /> Collected
                                 </Button>
                               ) : isDueFutureMonth ? (
                                 <span className="inline-flex items-center px-2.5 py-1 text-xs font-semibold text-blue-700 bg-blue-50 dark:bg-blue-950/40 dark:text-blue-300 rounded-lg border border-blue-200/60 dark:border-blue-800">
@@ -1012,9 +1012,9 @@ export default function BusinessLending() {
                                   className="!py-1.5 !px-3.5 !text-xs font-bold"
                                   icon={<ArrowDownLeft className="w-4 h-4" />}
                                   onClick={() => loan && openPrincipalRepayment(loan, rec)}
-                                  title="Record EMI Principal Repayment"
+                                  title="Record EMI Collection"
                                 >
-                                  Repay EMI
+                                  Collect EMI
                                 </Button>
                               )
                             ) : isDueFutureMonth ? (
@@ -2202,10 +2202,16 @@ function PrincipalRepaymentModal({
     : String(loan.principalRemaining);
   const [amount, setAmount] = useState(defaultAmount);
   const [bankAccountId, setBankAccountId] = useState(bankAccounts[0]?.id || '');
+  const [updateBankBalance, setUpdateBankBalance] = useState(true);
   const [date, setDate] = useState(record?.dueDate || todayISO());
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  const selectedAccount = useMemo(
+    () => bankAccounts.find((a) => a.id === bankAccountId),
+    [bankAccounts, bankAccountId]
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2229,43 +2235,51 @@ function PrincipalRepaymentModal({
         date,
         notes: notes.trim() || undefined,
       });
+
+      // If user opted to update bank balance, credit the receiving bank account
+      if (updateBankBalance && bankAccountId && val > 0) {
+        await bankAccountService.adjustBalance(bankAccountId, val);
+      }
+
       onSuccess();
     } catch (err) {
       console.error(err);
-      setError('Failed to record repayment');
+      setError('Failed to record collection');
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={isEmi ? "Record EMI Repayment" : "Repay Amount"} size="sm">
+    <Modal isOpen={isOpen} onClose={onClose} title={isEmi ? "Record EMI Collection" : "Collect Principal"} size="sm">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="p-3 rounded-lg bg-zinc-50 border border-zinc-200/80 text-xs space-y-1">
+        <div className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 text-xs space-y-1">
           <div className="flex justify-between">
-            <span className="text-zinc-600">Original Amount:</span>
-            <span className="font-bold text-zinc-900 font-mono-num">{formatCurrency(loan.principal)}</span>
+            <span className="text-zinc-600 dark:text-zinc-400">Original Amount:</span>
+            <span className="font-bold text-zinc-900 dark:text-zinc-100 font-mono-num">{formatCurrency(loan.principal)}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-zinc-600">Remaining Balance:</span>
-            <span className="font-bold text-zinc-950 font-mono-num">{formatCurrency(loan.principalRemaining)}</span>
+            <span className="text-zinc-600 dark:text-zinc-400">Remaining Balance:</span>
+            <span className="font-bold text-zinc-950 dark:text-zinc-100 font-mono-num">{formatCurrency(loan.principalRemaining)}</span>
           </div>
           {record && record.collectedAmount > 0 && (
-            <div className="flex justify-between border-t border-zinc-200/60 pt-1">
-              <span className="text-zinc-600">Repaid This Month:</span>
-              <span className="font-bold text-emerald-700 font-mono-num">{formatCurrency(record.collectedAmount)}</span>
+            <div className="flex justify-between border-t border-zinc-200/60 dark:border-zinc-800 pt-1">
+              <span className="text-zinc-600 dark:text-zinc-400">Collected This Month:</span>
+              <span className="font-bold text-emerald-700 dark:text-emerald-400 font-mono-num">{formatCurrency(record.collectedAmount)}</span>
             </div>
           )}
         </div>
 
-        <p className="text-[11px] text-zinc-600">
-          Amount repayment is capital return, not profit. Bank balance will increase.
+        <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
+          {isEmi
+            ? "Collect EMI installment from borrower into your bank account."
+            : "Principal collection from borrower. Capital returned, not profit."}
         </p>
 
         {error && <p className="text-xs text-red-600 font-medium">{error}</p>}
 
         <Input
-          label={isEmi ? "EMI Repayment Amount (₹)" : "Repayment Amount (₹)"}
+          label={isEmi ? "EMI Collection Amount (₹)" : "Collection Amount (₹)"}
           type="number"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
@@ -2283,8 +2297,31 @@ function PrincipalRepaymentModal({
           required
         />
 
+        {selectedAccount && (
+          <div className="p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/60 space-y-1.5">
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={updateBankBalance}
+                onChange={(e) => setUpdateBankBalance(e.target.checked)}
+                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+              />
+              <div>
+                <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 block">
+                  Update bank balance?
+                </span>
+                <span className="text-[11px] text-zinc-500 dark:text-zinc-400 block -mt-0.5">
+                  {updateBankBalance
+                    ? `Will credit +${formatCurrency(Number(amount) || 0)} into ${selectedAccount.nickname || selectedAccount.bankName} (New balance: ${formatCurrency((selectedAccount.currentBalance ?? selectedAccount.openingBalance ?? 0) + (Number(amount) || 0))})`
+                    : 'Bank balance will remain untouched'}
+                </span>
+              </div>
+            </label>
+          </div>
+        )}
+
         <Input
-          label="Date Returned"
+          label="Date Collected"
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
@@ -2298,7 +2335,7 @@ function PrincipalRepaymentModal({
           onChange={(e) => setNotes(e.target.value)}
         />
 
-        <div className="flex items-center justify-between gap-2 pt-3 border-t border-zinc-100">
+        <div className="flex items-center justify-between gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
           {record && record.collectedAmount > 0 ? (
             <Button
               type="button"
@@ -2306,23 +2343,23 @@ function PrincipalRepaymentModal({
               size="sm"
               loading={saving}
               onClick={async () => {
-                if (window.confirm('Are you sure you want to delete this repayment and reset status back to pending?')) {
+                if (window.confirm('Are you sure you want to delete this collection and reset status back to pending?')) {
                   setSaving(true);
                   try {
                     await businessLendingService.uncollectEmi(record.id);
                     onSuccess();
                   } catch (err) {
                     console.error(err);
-                    setError('Failed to reset repayment');
+                    setError('Failed to reset collection');
                   } finally {
                     setSaving(false);
                   }
                 }
               }}
-              title="Delete repayment and reset status to pending"
+              title="Delete collection and reset status to pending"
             >
               <RotateCcw className="w-3.5 h-3.5 mr-1" />
-              Delete Repayment
+              Delete Collection
             </Button>
           ) : (
             <div />
@@ -2333,7 +2370,7 @@ function PrincipalRepaymentModal({
               Cancel
             </Button>
             <Button type="submit" variant="primary" loading={saving}>
-              Confirm Return
+              Confirm Collection
             </Button>
           </div>
         </div>
@@ -2372,7 +2409,7 @@ function LoanDetailModal({
         businessLendingService.getPrincipalRepayments(loan.id),
       ]).then(([recs, repays]) => {
         setHistory(recs.sort((a, b) => b.year - a.year || b.month - a.month));
-        setRepayments(repays.sort((a, b) => b.date.localeCompare(a.date)));
+        setRepayments((repays || []).sort((a, b) => (b.date || b.createdAt || '').localeCompare(a.date || a.createdAt || '')));
         setLoading(false);
       });
     }
@@ -2431,13 +2468,13 @@ function LoanDetailModal({
           </div>
         </div>
 
-        {/* Amount Repayments */}
+        {/* Principal / EMI Collections */}
         <div>
-          <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-700 mb-2">
-            Amount Repayments ({repayments.length})
+          <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300 mb-2">
+            {loan.monthlyInterest === 0 ? `EMI Collections (${repayments.length})` : `Principal Collections (${repayments.length})`}
           </h4>
           {repayments.length === 0 ? (
-            <p className="text-xs text-zinc-600 py-1">No amount returned yet.</p>
+            <p className="text-xs text-zinc-600 dark:text-zinc-400 py-1">No collections recorded yet.</p>
           ) : (
             <div className="border border-zinc-200 rounded-lg overflow-hidden">
               <table className="w-full text-xs text-left">

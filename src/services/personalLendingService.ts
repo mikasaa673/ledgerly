@@ -14,7 +14,8 @@ export const personalLendingService = {
   },
 
   async getActive(): Promise<PersonalLoan[]> {
-    return db.personalLoans.where('status').equals('active').toArray();
+    const all = await db.personalLoans.toArray();
+    return all.filter((l) => (l.status === 'active' || !l.status) && l.status !== 'archived' && l.status !== 'closed');
   },
 
   async getById(id: string): Promise<PersonalLoan | undefined> {
@@ -244,35 +245,36 @@ export const personalLendingService = {
   // Aggregations
   async getTotalLent(): Promise<number> {
     const loans = await db.personalLoans.toArray();
-    return loans.filter(l => l.status !== 'archived').reduce((sum, l) => sum + l.amountLent, 0);
+    return loans.filter((l) => l && l.status !== 'archived').reduce((sum, l) => sum + (Number(l.amountLent) || 0), 0);
   },
 
   async getTotalReturned(): Promise<number> {
     const loans = await db.personalLoans.toArray();
-    return loans.filter(l => l.status !== 'archived').reduce((sum, l) => sum + l.amountReturned, 0);
+    return loans.filter((l) => l && l.status !== 'archived').reduce((sum, l) => sum + (Number(l.amountReturned) || 0), 0);
   },
 
   async getTotalOutstanding(): Promise<number> {
     const loans = await this.getActive();
-    return loans.reduce((sum, l) => sum + l.outstandingBalance, 0);
+    return loans.reduce((sum, l) => sum + (Number(l.outstandingBalance) || 0), 0);
   },
 
   async getPersonSummary(): Promise<{ personName: string; totalLent: number; totalReturned: number; outstanding: number }[]> {
-    const loans = await db.personalLoans.filter(l => l.status !== 'archived').toArray();
+    const loans = await db.personalLoans.filter((l) => l && l.status !== 'archived').toArray();
     const summary = new Map<string, { totalLent: number; totalReturned: number }>();
 
     for (const loan of loans) {
-      const existing = summary.get(loan.personName) || { totalLent: 0, totalReturned: 0 };
-      existing.totalLent += loan.amountLent;
-      existing.totalReturned += loan.amountReturned;
-      summary.set(loan.personName, existing);
+      const name = (loan.personName || 'Unknown').trim();
+      const existing = summary.get(name) || { totalLent: 0, totalReturned: 0 };
+      existing.totalLent += Number(loan.amountLent) || 0;
+      existing.totalReturned += Number(loan.amountReturned) || 0;
+      summary.set(name, existing);
     }
 
     return Array.from(summary.entries()).map(([personName, data]) => ({
       personName,
       totalLent: data.totalLent,
       totalReturned: data.totalReturned,
-      outstanding: data.totalLent - data.totalReturned,
+      outstanding: Math.max(0, data.totalLent - data.totalReturned),
     }));
   },
 };
