@@ -239,9 +239,12 @@ export default function BusinessLending() {
     let expInt = 0;
     let colInt = 0;
     let penInt = 0;
+    let colEmi = 0;
+    let emiColCount = 0;
 
     for (const rec of displayRecords) {
       const loan = loanMap.get(rec.loanId);
+      const isEmi = Boolean(rec.expectedInterest === 0 || (loan && loan.monthlyInterest === 0));
       const due = rec.dueDate ? parseISO(rec.dueDate) : null;
       // If the due date is in a future month (e.g. December when viewing November),
       // it CANNOT be added to this month's total interest or pending interest!
@@ -249,12 +252,21 @@ export default function BusinessLending() {
         ? due.getFullYear() > selectedYear || (due.getFullYear() === selectedYear && (due.getMonth() + 1) > selectedMonth)
         : false;
 
-      const effectiveExpected = isDueFutureMonth ? 0 : rec.expectedInterest;
-      const effectivePending = isDueFutureMonth ? 0 : rec.pendingAmount;
+      if (isEmi) {
+        // 0% EMI: Collections are principal / EMI recovery, NOT monthly interest!
+        if (rec.collectedAmount > 0) {
+          colEmi += rec.collectedAmount;
+          emiColCount += 1;
+        }
+      } else {
+        // Interest-based loan: update expected, collected, and pending interest
+        const effectiveExpected = isDueFutureMonth ? 0 : rec.expectedInterest;
+        const effectivePending = isDueFutureMonth ? 0 : rec.pendingAmount;
 
-      expInt += effectiveExpected;
-      colInt += rec.collectedAmount;
-      penInt += effectivePending;
+        expInt += effectiveExpected;
+        colInt += rec.collectedAmount;
+        penInt += effectivePending;
+      }
     }
 
     const activeL = allLoans.filter((l) => l.status === 'active');
@@ -269,6 +281,8 @@ export default function BusinessLending() {
       expectedInterest: expInt,
       collectedInterest: colInt,
       pendingInterest: penInt,
+      collectedEmi: colEmi,
+      emiColCount,
       activeCount: activeL.length,
       totalAmount,
       outstandingPrincipal: totalAmount,
@@ -295,7 +309,7 @@ export default function BusinessLending() {
         id: 'collectedInterest',
         label: 'Collected This Month',
         value: formatCurrency(stats.collectedInterest),
-        subtitle: stats.pendingInterest > 0 ? `${formatCurrency(stats.pendingInterest)} pending` : 'Fully collected',
+        subtitle: stats.pendingInterest > 0 ? `${formatCurrency(stats.pendingInterest)} pending` : 'Interest collected',
         numValue: stats.collectedInterest,
         isZero: (stats.collectedInterest || 0) === 0,
       },
@@ -344,6 +358,17 @@ export default function BusinessLending() {
       });
     }
 
+    if (stats.collectedEmi > 0 || !hideZeroTiles) {
+      tiles.push({
+        id: 'collectedEmi',
+        label: 'EMI Collected',
+        value: formatCurrency(stats.collectedEmi),
+        subtitle: stats.collectedEmi > 0 ? `${stats.emiColCount} EMI(s) collected` : `For ${getMonthName(selectedMonth).slice(0, 3)}`,
+        numValue: stats.collectedEmi,
+        isZero: (stats.collectedEmi || 0) === 0,
+      });
+    }
+
     return tiles;
   }, [stats, selectedMonth, hideZeroTiles]);
 
@@ -355,6 +380,7 @@ export default function BusinessLending() {
   const gridColsClass = useMemo(() => {
     const count = visibleStatTiles.length;
     switch (count) {
+      case 8: return 'grid-cols-2 sm:grid-cols-4 md:grid-cols-4 2xl:grid-cols-8';
       case 7: return 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 2xl:grid-cols-7';
       case 6: return 'grid-cols-2 sm:grid-cols-3 md:grid-cols-3 2xl:grid-cols-6';
       case 5: return 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5';

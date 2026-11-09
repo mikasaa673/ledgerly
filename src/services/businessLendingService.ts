@@ -802,22 +802,37 @@ export const businessLendingService = {
 
   async getInterestCollectedForMonth(month: number, year: number): Promise<number> {
     const records = await this.getMonthlyRecords(month, year);
-    return records.reduce((sum, r) => sum + r.collectedAmount, 0);
+    return records
+      .filter((r) => (r.expectedInterest || 0) > 0)
+      .reduce((sum, r) => sum + r.collectedAmount, 0);
+  },
+
+  async getEmiCollectedForMonth(month: number, year: number): Promise<number> {
+    const records = await this.getMonthlyRecords(month, year);
+    return records
+      .filter((r) => (r.expectedInterest || 0) === 0)
+      .reduce((sum, r) => sum + r.collectedAmount, 0);
   },
 
   async getInterestExpectedForMonth(month: number, year: number): Promise<number> {
     const records = await this.getMonthlyRecords(month, year);
-    return records.reduce((sum, r) => sum + r.expectedInterest, 0);
+    return records
+      .filter((r) => (r.expectedInterest || 0) > 0)
+      .reduce((sum, r) => sum + r.expectedInterest, 0);
   },
 
   async getInterestPendingForMonth(month: number, year: number): Promise<number> {
     const records = await this.getMonthlyRecords(month, year);
-    return records.reduce((sum, r) => sum + r.pendingAmount, 0);
+    return records
+      .filter((r) => (r.expectedInterest || 0) > 0)
+      .reduce((sum, r) => sum + r.pendingAmount, 0);
   },
 
   async getTotalLifetimeInterestCollected(): Promise<number> {
     const records = await db.monthlyInterestRecords.toArray();
-    return records.reduce((sum, r) => sum + r.collectedAmount, 0);
+    return records
+      .filter((r) => (r.expectedInterest || 0) > 0)
+      .reduce((sum, r) => sum + r.collectedAmount, 0);
   },
 
   async getPrincipalRepayments(loanId: string): Promise<PrincipalRepayment[]> {
